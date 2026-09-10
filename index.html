@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Project Schedule</title>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/dhtmlx-gantt@10.0.3/codebase/dhtmlxgantt.css">
+  <script src="https://cdn.jsdelivr.net/npm/dhtmlx-gantt@10.0.3/codebase/dhtmlxgantt.js"></script>
+
+  <style>
+    :root {
+      --bg: #ffffff;
+      --panel: #f7f8fa;
+      --line: #e2e5ea;
+      --ink: #1b1f26;
+      --muted: #6b7280;
+      --accent: #2f6feb;
+      --crit: #d9453d;
+      --warn-bg: #fff8e6;
+      --warn-line: #e7c66a;
+      --ok: #1a7f4b;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+
+    #app { display: flex; flex-direction: column; height: 100%; }
+
+    /* ---------- toolbar ---------- */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+      flex: 0 0 auto;
+    }
+
+    #projectName {
+      font-size: 15px;
+      font-weight: 600;
+      border: 1px solid transparent;
+      background: transparent;
+      padding: 4px 6px;
+      border-radius: 5px;
+      min-width: 120px;
+      max-width: 320px;
+      color: inherit;
+      font-family: inherit;
+    }
+    #projectName:hover { border-color: var(--line); }
+    #projectName:focus { border-color: var(--accent); outline: none; background: #fff; }
+
+    .sep { width: 1px; height: 22px; background: var(--line); margin: 0 2px; }
+    .spacer { flex: 1 1 auto; }
+
+    button, select {
+      font: inherit;
+      font-size: 13px;
+      padding: 5px 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      border-radius: 6px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    button:hover:not(:disabled) { border-color: #c3c8d0; background: #fbfcfd; }
+    button:disabled { opacity: .45; cursor: default; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button.primary:hover:not(:disabled) { background: #275ec9; border-color: #275ec9; }
+    button.toggled { background: #e8f0fe; border-color: #a9c4f5; }
+    .icon-btn { padding: 5px 8px; }
+
+    #status { font-size: 12px; color: var(--muted); padding: 0 4px; }
+    #status.dirty { color: #a65c00; font-weight: 600; }
+    #status.saved { color: var(--ok); }
+    #status.error { color: var(--crit); font-weight: 600; }
+
+    /* ---------- banners ---------- */
+    .banner {
+      padding: 8px 14px;
+      font-size: 13px;
+      border-bottom: 1px solid var(--warn-line);
+      background: var(--warn-bg);
+      display: none;
+      flex: 0 0 auto;
+      line-height: 1.5;
+    }
+    .banner.show { display: block; }
+    .banner.stale { background: #fdecea; border-color: #f0b3ad; }
+    .banner b { display: block; margin-bottom: 2px; }
+    .banner ul { margin: 4px 0 0; padding-left: 18px; }
+    .banner button { margin-left: 8px; padding: 3px 8px; font-size: 12px; }
+
+    /* ---------- gantt ---------- */
+    #gantt { flex: 1 1 auto; min-height: 0; }
+    .gantt_task_line.critical { background: var(--crit); border-color: #a8322c; }
+    .gantt_task_line.critical .gantt_task_progress { background: rgba(0, 0, 0, .22); }
+    .gantt_task_line.pinned { box-shadow: inset 3px 0 0 #f0a500; }
+    .cell-crit { color: var(--crit); font-weight: 600; }
+    .cell-muted { color: var(--muted); }
+    .gantt_grid_head_cell, .gantt_scale_cell { font-weight: 600; }
+
+    /* ---------- settings dialog ---------- */
+    dialog {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 0;
+      width: min(460px, 92vw);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, .18);
+      color: var(--ink);
+    }
+    dialog::backdrop { background: rgba(20, 24, 31, .35); }
+    .dlg-head { padding: 14px 18px 0; font-weight: 600; font-size: 15px; }
+    .dlg-body { padding: 14px 18px; }
+    .dlg-foot {
+      padding: 12px 18px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      background: var(--panel);
+      border-radius: 0 0 10px 10px;
+    }
+    .field { margin-bottom: 12px; }
+    .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .field input {
+      width: 100%;
+      font: inherit;
+      font-size: 13px;
+      padding: 6px 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--ink);
+    }
+    .field input:focus { outline: none; border-color: var(--accent); }
+    .row2 { display: flex; gap: 10px; }
+    .row2 .field { flex: 1; }
+    .hint { font-size: 12px; color: var(--muted); line-height: 1.55; }
+    .hint code { background: var(--panel); padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+    .hint a { color: var(--accent); }
+
+    #toast {
+      position: fixed;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: #1b1f26;
+      color: #fff;
+      padding: 9px 16px;
+      border-radius: 7px;
+      font-size: 13px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .18s, transform .18s;
+      z-index: 999;
+      max-width: 90vw;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    @media (max-width: 720px) {
+      .hide-sm { display: none; }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app">
+    <header>
+      <input id="projectName" value="Project" spellcheck="false" aria-label="Project name">
+      <span id="status">Loading…</span>
+
+      <div class="spacer"></div>
+
+      <button id="btnAdd" title="Add a task below the selection">+ Task</button>
+      <button id="btnMilestone" class="hide-sm" title="Add a milestone">◆ Milestone</button>
+      <button id="btnIndent" class="icon-btn" title="Indent (make a subtask)">→</button>
+      <button id="btnOutdent" class="icon-btn" title="Outdent">←</button>
+      <button id="btnDelete" class="icon-btn" title="Delete selected row">🗑</button>
+      <button id="btnUnpin" class="hide-sm" title="Let dependencies drive this task's date again">Unpin date</button>
+
+      <div class="sep"></div>
+
+      <select id="zoom" title="Timeline scale">
+        <option value="day">Day</option>
+        <option value="week" selected>Week</option>
+        <option value="month">Month</option>
+        <option value="quarter">Quarter</option>
+      </select>
+      <button id="btnCritical" title="Highlight the critical path">Critical path</button>
+
+      <div class="sep"></div>
+
+      <button id="btnSvg" title="Download a print-ready chart">Chart ▾</button>
+      <button id="btnCsv" class="hide-sm">CSV</button>
+      <button id="btnSettings" class="icon-btn" title="Repository &amp; access token">⚙</button>
+      <button id="btnSave" class="primary" disabled>Save</button>
+    </header>
+
+    <div id="staleBanner" class="banner stale"></div>
+    <div id="warnBanner" class="banner"></div>
+
+    <div id="gantt"></div>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <dialog id="settings">
+    <div class="dlg-head">Repository &amp; access</div>
+    <div class="dlg-body">
+      <div class="row2">
+        <div class="field">
+          <label for="setOwner">GitHub owner</label>
+          <input id="setOwner" spellcheck="false" placeholder="your-org">
+        </div>
+        <div class="field">
+          <label for="setRepo">Repository</label>
+          <input id="setRepo" spellcheck="false" placeholder="project-schedule">
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="setBranch">Branch</label>
+          <input id="setBranch" spellcheck="false" placeholder="main">
+        </div>
+        <div class="field">
+          <label for="setPath">Data file</label>
+          <input id="setPath" spellcheck="false" placeholder="schedule.json">
+        </div>
+      </div>
+      <div class="field">
+        <label for="setToken">Personal access token (stays in this browser)</label>
+        <input id="setToken" type="password" spellcheck="false" placeholder="github_pat_…">
+      </div>
+      <p class="hint">
+        Without a token you can view the schedule but not save. To edit, create a
+        <b>fine-grained</b> token at <a href="https://github.com/settings/personal-access-tokens/new"
+          target="_blank" rel="noopener">github.com/settings</a> with access limited to this one
+        repository and <code>Contents: Read and write</code>. It is stored in this browser's
+        localStorage only — never committed, never sent anywhere except github.com.
+      </p>
+    </div>
+    <div class="dlg-foot">
+      <button id="setForget">Forget token</button>
+      <button id="setCancel">Cancel</button>
+      <button id="setSave" class="primary">Save settings</button>
+    </div>
+  </dialog>
+
+  <script src="./app.js"></script>
+</body>
+
+</html>
