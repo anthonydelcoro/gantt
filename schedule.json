@@ -11,11 +11,11 @@
       "id": 1,
       "text": "Planning",
       "parent": 0,
-      "duration": 1,
+      "duration": 9,
       "progress": 0,
       "type": "task",
       "constraint_date": null,
-      "start_date": null
+      "start_date": "2026-09-14"
     },
     {
       "id": 2,
@@ -25,7 +25,7 @@
       "progress": 0,
       "type": "milestone",
       "constraint_date": "2026-09-14",
-      "start_date": null
+      "start_date": "2026-09-14"
     },
     {
       "id": 3,
@@ -35,7 +35,7 @@
       "progress": 0,
       "type": "task",
       "constraint_date": null,
-      "start_date": null
+      "start_date": "2026-09-14"
     },
     {
       "id": 4,
@@ -45,17 +45,17 @@
       "progress": 0,
       "type": "task",
       "constraint_date": null,
-      "start_date": null
+      "start_date": "2026-09-21"
     },
     {
       "id": 5,
       "text": "Design",
       "parent": 0,
-      "duration": 1,
+      "duration": 31,
       "progress": 0,
       "type": "task",
       "constraint_date": null,
-      "start_date": null
+      "start_date": "2026-09-23"
     },
     {
       "id": 6,
@@ -65,7 +65,7 @@
       "progress": 0,
       "type": "task",
       "constraint_date": null,
-      "start_date": null
+      "start_date": "2026-09-23"
     },
     {
       "id": 7,
@@ -75,7 +75,7 @@
       "progress": 0,
       "type": "task",
       "constraint_date": null,
-      "start_date": null
+      "start_date": "2026-10-05"
     },
     {
       "id": 8,
@@ -85,17 +85,17 @@
       "progress": 0,
       "type": "task",
       "constraint_date": null,
-      "start_date": null
+      "start_date": "2026-10-21"
     },
     {
       "id": 9,
       "text": "Procurement",
       "parent": 0,
-      "duration": 1,
+      "duration": 30,
       "progress": 0,
       "type": "task",
       "constraint_date": null,
-      "start_date": null
+      "start_date": "2026-09-14"
     },
     {
       "id": 10,
@@ -105,37 +105,57 @@
       "progress": 0,
       "type": "task",
       "constraint_date": null,
-      "start_date": null
+      "start_date": "2026-10-12"
     },
     {
       "id": 11,
       "text": "Vendor lead time",
       "parent": 9,
-      "duration": 20,
+      "duration": 1,
       "progress": 0,
       "type": "task",
-      "constraint_date": null,
-      "start_date": null
+      "constraint_date": "2026-10-12",
+      "start_date": "2026-10-12"
+    },
+    {
+      "id": 17,
+      "text": "New task",
+      "parent": 9,
+      "duration": 3,
+      "progress": 0,
+      "type": "task",
+      "constraint_date": "2026-09-14",
+      "start_date": "2026-09-14"
+    },
+    {
+      "id": 18,
+      "text": "New task",
+      "parent": 9,
+      "duration": 3,
+      "progress": 0,
+      "type": "task",
+      "constraint_date": "2026-09-14",
+      "start_date": "2026-09-14"
     },
     {
       "id": 12,
       "text": "Build",
       "parent": 0,
-      "duration": 1,
+      "duration": 26,
       "progress": 0,
       "type": "task",
       "constraint_date": null,
-      "start_date": null
+      "start_date": "2026-11-11"
     },
     {
       "id": 13,
       "text": "Fabrication",
       "parent": 12,
-      "duration": 15,
+      "duration": 1,
       "progress": 0,
       "type": "task",
-      "constraint_date": null,
-      "start_date": null
+      "constraint_date": "2026-11-11",
+      "start_date": "2026-11-11"
     },
     {
       "id": 14,
@@ -145,7 +165,7 @@
       "progress": 0,
       "type": "task",
       "constraint_date": null,
-      "start_date": null
+      "start_date": "2026-11-11"
     },
     {
       "id": 15,
@@ -155,17 +175,17 @@
       "progress": 0,
       "type": "task",
       "constraint_date": null,
-      "start_date": null
+      "start_date": "2026-11-25"
     },
     {
       "id": 16,
       "text": "Handover",
-      "parent": 0,
+      "parent": 12,
       "duration": 0,
       "progress": 0,
       "type": "milestone",
       "constraint_date": null,
-      "start_date": null
+      "start_date": "2026-12-07"
     }
   ],
   "links": [
@@ -210,34 +230,6 @@
       "target": 10,
       "type": "1",
       "lag": 5
-    },
-    {
-      "id": 7,
-      "source": 10,
-      "target": 11,
-      "type": "0",
-      "lag": 0
-    },
-    {
-      "id": 8,
-      "source": 8,
-      "target": 13,
-      "type": "0",
-      "lag": 0
-    },
-    {
-      "id": 9,
-      "source": 11,
-      "target": 14,
-      "type": "0",
-      "lag": 0
-    },
-    {
-      "id": 10,
-      "source": 13,
-      "target": 14,
-      "type": "0",
-      "lag": 0
     },
     {
       "id": 11,
