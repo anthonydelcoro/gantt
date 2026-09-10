@@ -175,8 +175,17 @@ export function schedule(model) {
     const D = dur(t);
     let s;
 
-    if (t.startOverride) s = cal.idx(t.startOverride);
-    else if (preds.get(id).length) s = -Infinity;
+    /* A date set by hand is honoured exactly, even if that overlaps whatever
+       comes before it. Dragging a bar has to put the bar where you dropped it,
+       otherwise the drag looks broken. Successors still follow along. */
+    if (t.startOverride) {
+      s = cal.idx(t.startOverride);
+      S.set(id, s);
+      E.set(id, s + D);
+      continue;
+    }
+
+    if (preds.get(id).length) s = -Infinity;
     else s = cal.idx(t.start || projectStart);
 
     if (!cycle.has(id)) {
@@ -260,6 +269,17 @@ export function schedule(model) {
 function clampPct(v) {
   const n = Math.round(Number(v) || 0);
   return Math.max(0, Math.min(100, n));
+}
+
+/* Nearest working day in a given direction. The drag handlers use this so the
+   bar you are dragging sits where it will actually land. */
+export function snapWorking(cal, dateISO, dir = 1) {
+  let d = parseISO(dateISO);
+  for (let i = 0; i < 21; i++) {
+    if (cal.isWorking(iso(d))) return iso(d);
+    d = addDays(d, dir);
+  }
+  return dateISO;
 }
 
 /* Number of working days from one date to another, used when someone edits

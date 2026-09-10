@@ -59,9 +59,15 @@ block module loading and sign in popups from `file://`.
 | Move a task in time | Drag its bar |
 | Change length | Drag the right edge of the bar |
 | Link two tasks | Hover a bar, drag the circle on either end onto another bar |
-| Remove a link | Click the arrow |
+| Change or remove a link | Click the arrow |
+| Overlap or space out two linked tasks | Click the arrow, set the offset |
 | Change phase colour | Click the small square next to a phase name |
 | Undo | Ctrl or Cmd Z |
+
+**Colours** live on the phase row. Click the small square to the left of a phase name
+and pick one of the eight presets or open the custom picker underneath them. The chart
+updates as you slide the picker so you can see the result before committing. Everything
+nested under that phase takes the colour.
 
 **Milestones** are tasks with zero days. Set the Days cell to 0 and the bar becomes a
 diamond. Set it back to a number and it becomes a normal task again.
@@ -77,10 +83,22 @@ under Account, Non working days, and they are skipped too.
 A task with nothing linked into it sits on its own date. A task with a predecessor is
 scheduled from that predecessor, as early as it can start.
 
-If you drag a linked task, or type a date into its Start cell, that becomes an override
-and the task stays there. Anything downstream shifts to follow. The Start cell shows a
-small amber dot when a date is set by hand. Right click that cell to clear the override
-and let the dependency drive it again.
+If you drag a linked task, or type a date into its Start cell, it stays exactly where
+you put it, even if that overlaps the task before it. Anything downstream shifts to
+follow. The Start cell shows a small amber dot when a date is set by hand. Right click
+that cell to clear it and hand the row back to its dependency.
+
+Dragging snaps to working days. If you drop a bar on a Saturday it lands on the Monday,
+and the bar follows your cursor to the place it will actually end up, so nothing jumps
+when you let go.
+
+**Offsets.** By default a finish to start link means the next task begins on the next
+working day. To have it begin on the same day the previous one finishes, click the
+arrow between them and set the offset to -1. A positive number leaves a deliberate gap,
+which is useful for things like curing time or a review window where nobody is working
+but the calendar still has to pass. Offsets are part of the link, so they survive when
+the task before them moves or changes length. That makes them a better tool than
+dragging for anything you want to hold true permanently.
 
 Dates are never saved. Only durations, links and overrides are stored, and each browser
 computes the chart from those. That is why everyone always sees the same thing, and why

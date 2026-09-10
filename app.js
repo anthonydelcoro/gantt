@@ -1,6 +1,6 @@
 import {
   schedule, flatten, childrenOf, iso, parseISO, addDays, todayISO,
-  daysBetween, workdaysSpan
+  daysBetween, workdaysSpan, snapWorking
 } from './scheduler.js';
 import * as store from './store.js';
 
@@ -49,6 +49,7 @@ const S = {
   sel: null,
   geom: new Map(),
   range: null,
+  px: 9.5,
   ready: false,
   undo: [],
   suppressUndo: false
@@ -463,7 +464,7 @@ function renderTimeline() {
   const c = S.computed;
   const z = ZOOM[S.zoom];
   const range = S.range = timelineRange();
-  const px = z.px;
+  const px = S.px = z.px;
   const width = Math.ceil(range.days * px);
   const height = S.rows.length * ROW_H;
 
@@ -658,6 +659,16 @@ function renderTimeline() {
   drawLinks();
 }
 
+/* Where a date sits in the timeline, in pixels. */
+function xOf(dateISO) {
+  if (!S.range) return 0;
+  return Math.round(daysBetween(S.range.from, dateISO) * S.px);
+}
+
+function snap(dateISO, dir) {
+  return snapWorking(S.computed.calendar, dateISO, dir);
+}
+
 function firstOfMonth(isoStr) {
   const d = parseISO(isoStr);
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
@@ -708,7 +719,7 @@ function drawLinks() {
     const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
     title.textContent = `${sName} to ${tName}. Click to remove.`;
     g.appendChild(title);
-    hit.addEventListener('click', () => removeLinkById(l.id, sName, tName));
+    hit.addEventListener('click', ev => openLinkMenu(ev, l, sName, tName));
     svg.appendChild(g);
   }
 }
@@ -905,10 +916,86 @@ function deleteRow(id) {
   if (S.sel === id) S.sel = null;
 }
 
-function removeLinkById(linkId, from, to) {
-  if (!confirm(`Remove the dependency from "${from}" to "${to}"?`)) return;
+function removeLinkById(linkId) {
   snapshot();
   store.removeLink(linkId);
+}
+
+const LINK_KINDS = [
+  ['0', 'Finish to start', 'the usual one: this starts after that finishes'],
+  ['1', 'Start to start', 'both begin together'],
+  ['2', 'Finish to finish', 'both end together'],
+  ['3', 'Start to finish', 'rarely used']
+];
+
+/* Clicking an arrow opens this. It is the only place lag lives, which is what
+   you need to overlap two tasks or leave a deliberate gap between them. */
+function openLinkMenu(ev, link, fromName, toName) {
+  const rect = { left: ev.clientX - 90, bottom: ev.clientY + 4 };
+  popMenu(rect, (m, close) => {
+    const head = document.createElement('div');
+    head.style.cssText = 'padding:8px 10px 4px;font-size:12px;color:#6b7684;line-height:1.45;max-width:250px;';
+    head.textContent = `${fromName} to ${toName}`;
+    m.appendChild(head);
+
+    for (const [value, label, note] of LINK_KINDS) {
+      const b = document.createElement('button');
+      b.innerHTML = `<span>${String(link.type) === value ? '&#10003;' : '&nbsp;&nbsp;'}</span>` +
+        `<span>${escapeHTML(label)}</span>`;
+      b.title = note;
+      b.addEventListener('click', () => {
+        if (String(link.type) !== value) {
+          snapshot();
+          store.applyPatch({ [`links/${link.id}/type`]: value });
+        }
+        close();
+      });
+      m.appendChild(b);
+    }
+
+    m.appendChild(document.createElement('hr'));
+
+    const lagRow = document.createElement('div');
+    lagRow.style.cssText = 'padding:6px 10px;display:flex;align-items:center;gap:8px;';
+    const lab = document.createElement('span');
+    lab.style.cssText = 'font-size:12.5px;';
+    lab.textContent = 'Offset';
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.value = Number(link.lag) || 0;
+    input.style.cssText = 'width:64px;font:inherit;font-size:12.5px;padding:3px 6px;' +
+      'border:1px solid #dfe3e9;border-radius:5px;';
+    const unit = document.createElement('span');
+    unit.style.cssText = 'font-size:12px;color:#6b7684;';
+    unit.textContent = 'days';
+    lagRow.append(lab, input, unit);
+    m.appendChild(lagRow);
+
+    const note = document.createElement('div');
+    note.style.cssText = 'padding:0 10px 8px;font-size:11.5px;color:#97a1ad;line-height:1.5;max-width:250px;';
+    note.textContent = '0 starts the next working day. Use -1 to start on the same day the one before it finishes, or a positive number to leave a gap.';
+    m.appendChild(note);
+
+    const commitLag = () => {
+      const n = Math.round(Number(input.value));
+      if (!isFinite(n) || n === (Number(link.lag) || 0)) return;
+      snapshot();
+      store.applyPatch({ [`links/${link.id}/lag`]: n });
+    };
+    input.addEventListener('keydown', e => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { commitLag(); close(); }
+      if (e.key === 'Escape') close();
+    });
+    input.addEventListener('change', commitLag);
+
+    m.appendChild(document.createElement('hr'));
+    const del = document.createElement('button');
+    del.innerHTML = '<span>&nbsp;&nbsp;</span><span>Remove this dependency</span>';
+    del.style.color = '#c0392b';
+    del.addEventListener('click', () => { close(); removeLinkById(link.id); });
+    m.appendChild(del);
+  });
 }
 
 function indent() {
@@ -972,19 +1059,21 @@ function startBarDrag(e, id) {
   const bar = e.currentTarget;
   const t = byId(id);
   const startX = e.clientX;
-  const baseLeft = parseFloat(bar.style.left);
-  let deltaDays = 0;
+  const originLeft = xOf(t.start);
+  let landing = t.start;
 
   dragSession(ev => {
-    deltaDays = Math.round((ev.clientX - startX) / pxPerDay());
-    bar.style.left = (baseLeft + deltaDays * pxPerDay()) + 'px';
+    const rawDays = Math.round((ev.clientX - startX) / pxPerDay());
+    /* snap to a working day in the direction of travel, and put the bar
+       exactly where it will end up so there is no jump on release */
+    landing = snap(iso(addDays(parseISO(t.start), rawDays)), rawDays < 0 ? -1 : 1);
+    bar.style.left = (originLeft + (xOf(landing) - originLeft)) + 'px';
     bar.classList.add('ghost');
   }, () => {
     bar.classList.remove('ghost');
-    if (!deltaDays) { render(); return; }
-    const next = iso(addDays(parseISO(t.start), deltaDays));
+    if (landing === t.start) { render(); return; }
     snapshot();
-    store.patchTask(id, { startOverride: next, start: next });
+    store.patchTask(id, { startOverride: landing, start: landing });
   });
 }
 
@@ -997,22 +1086,22 @@ function startResize(e, id) {
   const bar = e.currentTarget.parentElement;
   const t = byId(id);
   const startX = e.clientX;
-  const baseW = parseFloat(bar.style.width);
-  let deltaDays = 0;
+  const left = xOf(t.start);
+  let finish = t.finish;
+  let days = t.duration;
 
   dragSession(ev => {
-    deltaDays = Math.round((ev.clientX - startX) / pxPerDay());
-    bar.style.width = Math.max(4, baseW + deltaDays * pxPerDay()) + 'px';
+    const rawDays = Math.round((ev.clientX - startX) / pxPerDay());
+    let candidate = iso(addDays(parseISO(t.finish), rawDays));
+    if (candidate < t.start) candidate = t.start;
+    finish = snap(candidate, rawDays < 0 ? -1 : 1);
+    if (finish < t.start) finish = t.start;
+    days = workdaysSpan(S.computed.calendar, t.start, finish);
+    /* the bar covers the whole span including any weekend inside it */
+    bar.style.width = Math.max(4, xOf(iso(addDays(parseISO(finish), 1))) - left) + 'px';
+    bar.title = days + ' working day' + (days === 1 ? '' : 's');
   }, () => {
-    if (!deltaDays) { render(); return; }
-    const newFinish = iso(addDays(parseISO(t.finish), deltaDays));
-    if (newFinish < t.start) {
-      snapshot();
-      store.patchTask(id, { duration: 0 });
-      toast('Zero days, this is now a milestone');
-      return;
-    }
-    const days = workdaysSpan(S.computed.calendar, t.start, newFinish);
+    if (days === t.duration) { render(); return; }
     snapshot();
     store.patchTask(id, { duration: days });
   });
@@ -1267,7 +1356,7 @@ function openPalette(e, id) {
     for (const c of PALETTE) {
       const i = document.createElement('i');
       i.style.background = c;
-      if ((t.color || '') === c) i.className = 'on';
+      if ((t.color || '').toLowerCase() === c.toLowerCase()) i.className = 'on';
       i.addEventListener('click', () => {
         snapshot();
         store.patchTask(id, { color: c });
@@ -1276,7 +1365,47 @@ function openPalette(e, id) {
       grid.appendChild(i);
     }
     m.appendChild(grid);
+    m.appendChild(document.createElement('hr'));
+
+    const row = document.createElement('label');
+    row.style.cssText = 'display:flex;align-items:center;gap:9px;padding:7px 10px;cursor:pointer;font-size:13px;';
+    const picker = document.createElement('input');
+    picker.type = 'color';
+    picker.id = 'customColour';
+    picker.value = t.colour || PALETTE[0];
+    picker.style.cssText = 'width:28px;height:24px;padding:0;border:1px solid #dfe3e9;' +
+      'border-radius:5px;background:none;cursor:pointer;';
+    const label = document.createElement('span');
+    label.textContent = 'Custom colour';
+    row.append(picker, label);
+
+    /* fires while the picker is open, so the chart updates as they slide */
+    let pending = null;
+    picker.addEventListener('input', () => {
+      pending = picker.value;
+      document.querySelectorAll('#tlCanvas .bar').forEach(b => {
+        const bt = byId(b.dataset.id);
+        if (bt && !bt.isSummary && !bt.isMilestone && isUnder(bt, id)) b.style.background = pending;
+      });
+    });
+    picker.addEventListener('change', () => {
+      if (!pending) return;
+      snapshot();
+      store.patchTask(id, { color: pending });
+      close();
+    });
+    m.appendChild(row);
   });
+}
+
+/* is `task` the phase `rootId` or somewhere beneath it */
+function isUnder(task, rootId) {
+  let cur = task;
+  for (let i = 0; i < 60 && cur; i++) {
+    if (cur.id === rootId) return true;
+    cur = cur.parent ? byId(cur.parent) : null;
+  }
+  return false;
 }
 
 function wireChrome() {
