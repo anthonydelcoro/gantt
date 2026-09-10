@@ -344,8 +344,8 @@ function renderRows() {
           if (row.depth === 0) {
             const sw = document.createElement('span');
             sw.className = 'swatch';
-            sw.style.background = t.colour || PALETTE[0];
-            sw.title = 'Colour for this phase';
+            sw.style.background = t.color || PALETTE[0];
+            sw.title = 'color for this phase';
             sw.addEventListener('click', e => { e.stopPropagation(); openPalette(e, t.id); });
             cell.appendChild(sw);
           }
@@ -636,7 +636,7 @@ function renderTimeline() {
     bar.style.left = (t.isMilestone ? left - 6 : left) + 'px';
     bar.style.top = (y + (t.isSummary ? 10 : t.isMilestone ? 8 : 7)) + 'px';
     if (!t.isMilestone) bar.style.width = w + 'px';
-    if (!t.isSummary && !t.isMilestone) bar.style.background = t.colour || PALETTE[0];
+    if (!t.isSummary && !t.isMilestone) bar.style.background = t.color || PALETTE[0];
 
     bar.title = `${t.text}\n${fmtDate(t.start)} to ${fmtDate(t.finish)}` +
       (t.isMilestone ? '' : `\n${t.duration} working day${t.duration === 1 ? '' : 's'}`) +
@@ -1389,12 +1389,12 @@ function openPalette(e, id) {
     row.style.cssText = 'display:flex;align-items:center;gap:9px;padding:7px 10px;cursor:pointer;font-size:13px;';
     const picker = document.createElement('input');
     picker.type = 'color';
-    picker.id = 'customColour';
-    picker.value = t.colour || PALETTE[0];
+    picker.id = 'customcolor';
+    picker.value = t.color || PALETTE[0];
     picker.style.cssText = 'width:28px;height:24px;padding:0;border:1px solid #dfe3e9;' +
       'border-radius:5px;background:none;cursor:pointer;';
     const label = document.createElement('span');
-    label.textContent = 'Custom colour';
+    label.textContent = 'Custom color';
     row.append(picker, label);
 
     /* fires while the picker is open, so the chart updates as they slide */
@@ -1710,8 +1710,8 @@ function buildSVG() {
       s.push(`<path d="M${x1 + w},${cy + 4} l0,5 l-5,-5 z" fill="#1f3a5f"/>`);
       pos.set(t.id, { x1, x2: x1 + w, cy });
     } else {
-      const colour = t.colour || PALETTE[0];
-      s.push(`<rect x="${x1}" y="${cy - 7}" width="${w}" height="14" rx="2.5" fill="${colour}"/>`);
+      const color = t.color || PALETTE[0];
+      s.push(`<rect x="${x1}" y="${cy - 7}" width="${w}" height="14" rx="2.5" fill="${color}"/>`);
       if (t.pct > 0) s.push(`<rect x="${x1}" y="${cy - 2.5}" width="${w * t.pct / 100}" height="5" fill="rgba(0,0,0,0.5)"/>`);
       pos.set(t.id, { x1, x2: x1 + w, cy });
     }
