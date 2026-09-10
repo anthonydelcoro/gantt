@@ -37,7 +37,7 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 
 /* Which build is running. Shown in the Account menu so there is never any
    doubt about whether a deploy actually landed. */
-const BUILD = '2026-09-10d';
+const BUILD = '2026-09-10e';
 
 /* ==========================================================================
    State
@@ -697,6 +697,26 @@ function nextMonth(d) {
 const minISO = (a, b) => a < b ? a : b;
 const maxISO = (a, b) => a > b ? a : b;
 
+/* Arrow routing. The important bit is the leader: a straight horizontal run
+   into the bar before the arrowhead, so the arrow reads as pointing at the
+   task rather than hooking into its side. */
+const ARROW = { out: 11, lead: 18, gap: 5 };
+
+function linkPath(sx, sy, tx, ty, fromRight, enterRight, rowH) {
+  const { out, lead, gap } = ARROW;
+  const outX = sx + (fromRight ? out : -out);
+  const tipX = enterRight ? tx + gap : tx - gap;
+  const leadX = enterRight ? tipX + lead : tipX - lead;
+
+  /* go straight across when there is room for a full leader at that height */
+  const room = enterRight ? leadX <= outX : leadX >= outX;
+  if (room) return `M${sx},${sy} H${outX} V${ty} H${tipX}`;
+
+  /* otherwise step out of the source row, run back, then come in level */
+  const mid = ty >= sy ? sy + rowH / 2 : sy - rowH / 2;
+  return `M${sx},${sy} H${outX} V${mid} H${leadX} V${ty} H${tipX}`;
+}
+
 function drawLinks() {
   const svg = el('links');
   if (!svg) return;
@@ -709,19 +729,11 @@ function drawLinks() {
     if (!a || !b) continue;
 
     const type = String(l.type);
-    const sx = (type === '1' || type === '3') ? a.x1 : a.x2;
-    const tx = (type === '2' || type === '3') ? b.x2 : b.x1;
-    const sy = a.y, ty = b.y;
-    const out = (type === '1' || type === '3') ? -8 : 8;
-    const into = (type === '2' || type === '3') ? 7 : -7;
-
-    let d;
-    if ((into < 0 && tx >= sx + 14) || (into > 0 && tx <= sx - 14)) {
-      d = `M${sx},${sy} H${sx + out} V${ty} H${tx + into}`;
-    } else {
-      const mid = ty > sy ? sy + ROW_H / 2 : sy - ROW_H / 2;
-      d = `M${sx},${sy} H${sx + out} V${mid} H${tx + into * 2} V${ty} H${tx + into}`;
-    }
+    const fromRight = !(type === '1' || type === '3');
+    const enterRight = (type === '2' || type === '3');
+    const sx = fromRight ? a.x2 : a.x1;
+    const tx = enterRight ? b.x2 : b.x1;
+    const d = linkPath(sx, a.y, tx, b.y, fromRight, enterRight, ROW_H);
 
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -1721,14 +1733,11 @@ function buildSVG() {
     const a = pos.get(l.source), b = pos.get(l.target);
     if (!a || !b) continue;
     const type = String(l.type);
-    const sx = (type === '1' || type === '3') ? a.x1 : a.x2;
-    const tx = (type === '2' || type === '3') ? b.x2 : b.x1;
-    let d;
-    if (tx >= sx + 12) d = `M${sx},${a.cy} H${sx + 7} V${b.cy} H${tx - 6}`;
-    else {
-      const mid = b.cy > a.cy ? a.cy + ROW / 2 : a.cy - ROW / 2;
-      d = `M${sx},${a.cy} H${sx + 7} V${mid} H${tx - 14} V${b.cy} H${tx - 6}`;
-    }
+    const fromRight = !(type === '1' || type === '3');
+    const enterRight = (type === '2' || type === '3');
+    const sx = fromRight ? a.x2 : a.x1;
+    const tx = enterRight ? b.x2 : b.x1;
+    const d = linkPath(sx, a.cy, tx, b.cy, fromRight, enterRight, ROW);
     s.push(`<path d="${d}" fill="none" stroke="#8b95a3" stroke-width="1.1" marker-end="url(#ah)"/>`);
   }
 
@@ -1841,3 +1850,7 @@ function starterSchedule() {
     links: L
   };
 }
+
+/* A small hook for poking at the chart from the browser console, and for the
+   test suite to check arrow geometry without screenshotting anything. */
+window.GanttApp = { linkPath, schedule, state: S, build: BUILD };
