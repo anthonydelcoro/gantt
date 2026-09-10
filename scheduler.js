@@ -32,15 +32,20 @@ export function daysBetween(a, b) {
   return Math.round((parseISO(b) - parseISO(a)) / 86400000);
 }
 
-export function buildCalendar(anchorISO, holidays = [], back = 500, forward = 3000) {
+export const DEFAULT_WORKDAYS = [1, 2, 3, 4, 5];
+
+/* `workdays` is a list of day numbers, 0 for Sunday through 6 for Saturday.
+   Pass all seven and nothing is skipped. */
+export function buildCalendar(anchorISO, holidays = [], workdays = DEFAULT_WORKDAYS,
+  back = 500, forward = 3000) {
   const holiday = new Set(holidays);
+  const working = new Set((workdays && workdays.length ? workdays : DEFAULT_WORKDAYS).map(Number));
   const days = [];
   const index = new Map();
   let cur = addDays(parseISO(anchorISO), -back);
   for (let i = 0; i <= back + forward; i++) {
     const s = iso(cur);
-    const dow = cur.getUTCDay();
-    if (dow !== 0 && dow !== 6 && !holiday.has(s)) {
+    if (working.has(cur.getUTCDay()) && !holiday.has(s)) {
       index.set(s, days.length);
       days.push(s);
     }
@@ -108,7 +113,7 @@ export function schedule(model) {
   const tasks = model.tasks.map(t => ({ ...t }));
   const links = (model.links || []).filter(Boolean);
   const projectStart = model.projectStart || todayISO();
-  const cal = buildCalendar(projectStart, model.holidays || []);
+  const cal = buildCalendar(projectStart, model.holidays || [], model.workdays);
   const P0 = cal.idx(projectStart);
 
   const byId = new Map(tasks.map(t => [t.id, t]));

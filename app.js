@@ -1,6 +1,6 @@
 import {
   schedule, flatten, childrenOf, iso, parseISO, addDays, todayISO,
-  daysBetween, workdaysSpan, snapWorking
+  daysBetween, workdaysSpan, snapWorking, DEFAULT_WORKDAYS
 } from './scheduler.js';
 import * as store from './store.js';
 
@@ -33,6 +33,11 @@ const ROW_H = 30;
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
 const DOW = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/* Which build is running. Shown in the Account menu so there is never any
+   doubt about whether a deploy actually landed. */
+const BUILD = '2026-09-10c';
 
 /* ==========================================================================
    State
@@ -132,6 +137,7 @@ function recompute() {
   S.computed = schedule({
     projectStart: S.meta.projectStart || todayISO(),
     holidays: Object.keys(S.meta.holidays || {}),
+    workdays: currentWorkdays(),
     tasks: S.tasks,
     links: S.links
   });
@@ -151,6 +157,20 @@ function showWarning(text) {
    ========================================================================== */
 
 function byId(id) { return S.computed.tasks.find(t => t.id === id); }
+
+/* Firebase hands arrays back as arrays when the keys are contiguous and as an
+   object otherwise, so accept either. */
+function currentWorkdays() {
+  const raw = S.meta.workdays;
+  const list = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? Object.values(raw) : null);
+  const nums = (list || DEFAULT_WORKDAYS)
+    .map(Number).filter(n => Number.isInteger(n) && n >= 0 && n <= 6);
+  return nums.length ? [...new Set(nums)].sort() : DEFAULT_WORKDAYS;
+}
+
+function isWorkingDay(dateISO) {
+  return S.computed ? S.computed.calendar.isWorking(dateISO) : true;
+}
 
 function fmtDate(isoStr) {
   if (!isoStr) return '';
@@ -500,9 +520,8 @@ function renderTimeline() {
     }
     /* bottom: one cell per day, single letter */
     for (let d = parseISO(range.from); iso(d) < range.to; d = addDays(d, 1)) {
-      const dow = d.getUTCDay();
-      const off = dow === 0 || dow === 6 || (S.meta.holidays || {})[iso(d)];
-      bot.appendChild(stick(x(iso(d)), Math.round(px), DOW[dow], off ? 'we' : ''));
+      bot.appendChild(stick(x(iso(d)), Math.round(px), DOW[d.getUTCDay()],
+        isWorkingDay(iso(d)) ? '' : 'we'));
     }
   } else if (S.zoom === 'week') {
     for (let d = firstOfMonth(range.from); iso(d) < range.to; d = nextMonth(d)) {
@@ -542,8 +561,7 @@ function renderTimeline() {
   /* weekend shading, only when days are wide enough to read */
   if (z.weekend) {
     for (let d = parseISO(range.from); iso(d) < range.to; d = addDays(d, 1)) {
-      const dow = d.getUTCDay();
-      if (dow === 0 || dow === 6 || (S.meta.holidays || {})[iso(d)]) {
+      if (!isWorkingDay(iso(d))) {
         const w = document.createElement('div');
         w.className = 'wecol';
         w.style.left = x(iso(d)) + 'px';
@@ -1464,8 +1482,13 @@ function openAccountMenu(rect) {
     m.appendChild(who);
     m.appendChild(document.createElement('hr'));
 
+    const week = document.createElement('button');
+    week.textContent = 'Working days of the week';
+    week.addEventListener('click', () => { close(); openWorkdays(rect); });
+    m.appendChild(week);
+
     const holidays = document.createElement('button');
-    holidays.textContent = 'Non working days';
+    holidays.textContent = 'Holidays and days off';
     holidays.addEventListener('click', () => { close(); editHolidays(); });
     m.appendChild(holidays);
 
@@ -1475,10 +1498,70 @@ function openAccountMenu(rect) {
     m.appendChild(startBtn);
 
     m.appendChild(document.createElement('hr'));
+
+    const ver = document.createElement('div');
+    ver.style.cssText = 'padding:4px 10px 8px;color:#97a1ad;font-size:11px;';
+    ver.textContent = 'Build ' + BUILD;
+    ver.title = 'If this is not the build you just deployed, reload with Ctrl Shift R';
+    m.appendChild(ver);
+
     const out = document.createElement('button');
     out.textContent = 'Sign out';
     out.addEventListener('click', () => { close(); store.leave(); });
     m.appendChild(out);
+  });
+}
+
+/* Which days of the week count as working days. Tick Saturday and Sunday and
+   tasks can run and finish on the weekend like any other day. */
+function openWorkdays(rect) {
+  const active = new Set(currentWorkdays());
+  popMenu(rect, m => {
+    const head = document.createElement('div');
+    head.style.cssText = 'padding:8px 10px 6px;font-size:12px;color:#6b7684;max-width:230px;line-height:1.45;';
+    head.textContent = 'Days that count towards a task length. Unticked days are skipped and shaded on the chart.';
+    m.appendChild(head);
+
+    const order = [1, 2, 3, 4, 5, 6, 0];
+    for (const d of order) {
+      const row = document.createElement('label');
+      row.style.cssText = 'display:flex;align-items:center;gap:9px;padding:5px 10px;cursor:pointer;font-size:13px;border-radius:6px;';
+      row.addEventListener('mouseenter', () => row.style.background = '#f3f6fa');
+      row.addEventListener('mouseleave', () => row.style.background = 'none');
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = active.has(d);
+      cb.dataset.day = d;
+      cb.style.cssText = 'width:15px;height:15px;';
+      cb.addEventListener('change', () => {
+        if (cb.checked) active.add(d); else active.delete(d);
+        if (!active.size) {
+          active.add(d);
+          cb.checked = true;
+          toast('At least one day has to be a working day');
+          return;
+        }
+        snapshot();
+        store.patchMeta({ workdays: [...active].sort((a, b) => a - b) });
+      });
+
+      const name = document.createElement('span');
+      name.textContent = DAY_NAMES[d];
+      row.append(cb, name);
+      m.appendChild(row);
+    }
+
+    m.appendChild(document.createElement('hr'));
+    const all = document.createElement('button');
+    all.textContent = 'Use all seven days';
+    all.addEventListener('click', () => {
+      snapshot();
+      store.patchMeta({ workdays: [0, 1, 2, 3, 4, 5, 6] });
+      [...m.querySelectorAll('input[type=checkbox]')].forEach(c => c.checked = true);
+      [0, 1, 2, 3, 4, 5, 6].forEach(d => active.add(d));
+    });
+    m.appendChild(all);
   });
 }
 
@@ -1494,7 +1577,8 @@ function editProjectStart() {
 function editHolidays() {
   const current = Object.keys(S.meta.holidays || {}).sort().join('\n');
   const v = prompt(
-    'Non working days, one per line as YYYY-MM-DD. Weekends are already skipped.',
+    'Days off, one per line as YYYY-MM-DD. These are skipped on top of whatever ' +
+    'you have set under Working days of the week.',
     current);
   if (v === null) return;
   const map = {};
@@ -1578,8 +1662,7 @@ function buildSVG() {
   });
 
   for (let d = new Date(startD.getTime()); d < endD; d = addDays(d, 1)) {
-    const dow = d.getUTCDay();
-    if (px >= 5 && (dow === 0 || dow === 6 || (S.meta.holidays || {})[iso(d)])) {
+    if (px >= 5 && !c.calendar.isWorking(iso(d))) {
       s.push(`<rect x="${x(iso(d))}" y="${top}" width="${Math.ceil(px)}" height="${bottom - top}" fill="#f2f4f7"/>`);
     }
   }

@@ -75,8 +75,15 @@ diamond. Set it back to a number and it becomes a normal task again.
 **Percent done** on a phase is calculated from its children, weighted by length, so a
 20 day task counts for more than a 2 day one. You cannot type over it directly.
 
-**Days are working days.** Weekends are skipped automatically. Add university holidays
-under Account, Non working days, and they are skipped too.
+**Days are working days.** By default that means Monday to Friday. Open Account,
+Working days of the week, and tick Saturday and Sunday if you want the schedule to run
+straight through, or use the "all seven days" shortcut. Tasks and deadlines can then
+land on a weekend like any other day, and the grey shading disappears from the chart.
+You can also drop a day mid week, for example a four day week with Fridays off.
+
+Account, Holidays and days off takes specific dates that are skipped on top of that.
+
+The setting is shared, so changing it changes the chart for the whole team.
 
 ## How dates are decided
 
@@ -134,6 +141,13 @@ replace the rules with an allow list:
 
 Then add each person under `members` in the database as a key like `jsmith@vt,edu` set
 to `true`. Dots become commas because Firebase keys cannot contain a dot.
+
+## Checking which version is deployed
+
+Open the Account menu and look at the bottom. It shows a build stamp. If that is not the
+build you just pushed, the browser is holding a cached copy of `app.js`. Reload with
+Ctrl Shift R, or Cmd Shift R on a Mac. GitHub Pages also takes a minute or two to
+publish after a commit.
 
 ## Limits worth knowing
 
