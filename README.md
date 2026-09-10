@@ -1,171 +1,141 @@
-# Collaborative Gantt
+# Project Schedule
 
-A single-page Gantt chart with real dependency scheduling, hosted on GitHub Pages.
-The schedule lives in `schedule.json` in this repo, so Git handles versioning,
-attribution and conflict detection — no server, no database, no per-seat cost.
+A Gantt chart with real dependency scheduling, shared live by the team. Static page on
+GitHub Pages, data in Firebase, Google sign in restricted to vt.edu.
 
-What it does that a spreadsheet doesn't: four dependency types with lag, automatic
-successor shifting, working-day arithmetic with holidays, summary rollups,
-milestones, total float and critical path.
+Everyone sees edits as they happen. Writes go field by field, so two people working on
+different rows never overwrite each other.
 
----
-
-## Setup (about ten minutes)
-
-**1. Create a repository** and add these four files to the root:
+## Files
 
 ```
-index.html      the page
-app.js          the scheduler and GitHub sync
-schedule.json   your data
-README.md       this file
+index.html      the page and all styling
+app.js          the interface
+scheduler.js    working day calendar and dependency resolution
+store.js        Firebase reads, writes and presence
+config.js       your Firebase project settings
 ```
 
-**2. Turn on Pages.** Settings → Pages → Source: *Deploy from a branch* → `main` / `root`.
-After a minute the site is at `https://<owner>.github.io/<repo>/`.
+## Setup
 
-**3. Everyone who needs to edit creates a token.** Go to
-[Settings → Developer settings → Personal access tokens → Fine-grained tokens](https://github.com/settings/personal-access-tokens/new):
+Firebase is already configured for project `gantt-chart-bf9ce`. What is left:
 
-- **Repository access:** *Only select repositories* → this repo only
-- **Permissions:** *Repository permissions → Contents → Read and write*
-- **Expiration:** whatever your team is comfortable with; you'll be prompted to renew
+1. Put these five files in the root of a GitHub repository.
+2. Settings, Pages, Source: Deploy from a branch, `main` / root.
+3. In the Firebase console under Authentication, Settings, Authorized domains, add
+   `yourname.github.io`. Without this Google sign in will refuse to open.
+4. Confirm the database rules are published:
 
-Copy the token, open the site, click ⚙, paste it, save. It is kept in that browser's
-localStorage and sent only to `api.github.com`. It never enters the repo.
+```json
+{
+  "rules": {
+    "schedule": {
+      ".read": "auth != null && auth.token.email_verified == true && auth.token.email.matches(/.*@vt[.]edu$/)",
+      ".write": "auth != null && auth.token.email_verified == true && auth.token.email.matches(/.*@vt[.]edu$/)"
+    }
+  }
+}
+```
 
-Anyone without a token still sees the schedule — read-only.
+Open the page, sign in, and a starter schedule is created on first run. Everyone else
+just signs in. There is nothing to install and no token to paste or renew.
 
-**4. Confirm the repo settings** in the same ⚙ dialog. The page guesses owner and repo
-from the Pages URL, which is right most of the time; correct it if not.
-
-> **Trying it locally first?** Don't open `index.html` by double-clicking it — browsers
-> block `fetch` from `file://`, so the schedule won't load. Run
-> `python3 -m http.server 8000` in the folder and visit `http://localhost:8000`.
-
----
+Testing locally: run `python3 -m http.server 8000` in the folder and open
+`http://localhost:8000`. Opening the file directly will not work, because browsers
+block module loading and sign in popups from `file://`.
 
 ## Using it
 
 | Action | How |
 | --- | --- |
-| Rename a task | Click the name cell and type |
-| Change duration | Click the Days cell (working days, weekends excluded) |
-| Set a dependency | Drag from the edge of one bar to another, or type in the **Pred.** column |
-| Move a task in time | Drag its bar — this pins the date (📌) |
-| Release a pinned date | Select the row → **Unpin date** |
-| Add a row | **+ Task** or **◆ Milestone**, inserted below the selection |
-| Make a sub-task | Select the row → **→** (indent). Parents become summary rows automatically |
-| Reorder | Drag the row in the grid |
-| Undo | Ctrl/Cmd + Z |
-| Save | **Save** or Ctrl/Cmd + S — this commits to `schedule.json` |
+| Rename, set responsible, days, percent | Click the cell and type |
+| Set a date | Click the Start or Finish cell, pick from the calendar |
+| Add a sub task | Hover a row, click the plus on the right of the name |
+| Add a phase | Plus in the Task Name column header |
+| Delete | Hover a row, click the bin. Or select it and press Delete |
+| Change nesting | Tab to indent, Shift Tab to outdent |
+| Reorder | Drag the row number. Drop on the middle of a row to nest inside it |
+| Collapse a phase | Triangle to the left of the name |
+| Move a task in time | Drag its bar |
+| Change length | Drag the right edge of the bar |
+| Link two tasks | Hover a bar, drag the circle on either end onto another bar |
+| Remove a link | Click the arrow |
+| Change phase colour | Click the small square next to a phase name |
+| Undo | Ctrl or Cmd Z |
 
-**Predecessor syntax** matches MS Project. The number is the row's `#`:
+**Milestones** are tasks with zero days. Set the Days cell to 0 and the bar becomes a
+diamond. Set it back to a number and it becomes a normal task again.
 
-```
-5           finish-to-start, no lag
-5FS+3d      finish-to-start, three working days later
-5SS         start-to-start
-5FF-2d      finish-to-finish, two days early
-5, 9FS+1d   several predecessors
-```
+**Percent done** on a phase is calculated from its children, weighted by length, so a
+20 day task counts for more than a 2 day one. You cannot type over it directly.
 
-**Pinned vs. driven dates.** A task with no predecessor sits at its own date. A task
-with a predecessor is scheduled from it, as soon as possible. If you drag a task that
-has a predecessor, it gets pinned (a "start no earlier than" constraint) and stops
-moving earlier — the same thing MS Project does. Unpin to hand it back to the network.
+**Days are working days.** Weekends are skipped automatically. Add university holidays
+under Account, Non working days, and they are skipped too.
 
-**Critical path** is computed from total float — tasks with zero float. Toggle the
-highlight with the **Critical path** button. The Float column shows slack in working
-days.
+## How dates are decided
 
-**Non-working time.** Weekends are always skipped. Add company holidays to the
-`holidays` array in `schedule.json` as `"YYYY-MM-DD"` and they're excluded too.
+A task with nothing linked into it sits on its own date. A task with a predecessor is
+scheduled from that predecessor, as early as it can start.
 
-**Exports.** *Chart ▾* gives a print-ready SVG (vector, drops into Word, Illustrator
-or a slide at any size) or a PNG. *CSV* gives the table with dates, float and
-predecessors for anyone who wants it in a spreadsheet.
+If you drag a linked task, or type a date into its Start cell, that becomes an override
+and the task stays there. Anything downstream shifts to follow. The Start cell shows a
+small amber dot when a date is set by hand. Right click that cell to clear the override
+and let the dependency drive it again.
 
----
+Dates are never saved. Only durations, links and overrides are stored, and each browser
+computes the chart from those. That is why everyone always sees the same thing, and why
+changing one duration ripples through immediately for the whole team.
 
-## How collaboration works
+Dependencies attach to individual tasks, not to phase rows. If you try to link a phase
+the app tells you and asks you to link the tasks inside it. Links that would create a
+loop are refused when you draw them.
 
-The page reads `schedule.json` along with its Git blob SHA. When you save, that SHA
-goes back to GitHub. If someone committed in between, your SHA is stale and GitHub
-**refuses the write** rather than silently overwriting their work — you get a banner
-telling you to reload. While you have the page open it also polls every 45 seconds
-and quietly pulls in a teammate's changes if you have nothing unsaved.
+## Exports
 
-This is deliberately not real-time co-editing. Two people typing at once will make
-one of them redo their edits. For two or three editors it's rarely a problem, and
-you get things Project never gave you: every change is a commit, with an author, a
-timestamp, a diff, and the ability to revert.
+Export gives a PNG or SVG of the whole chart, laid out for printing rather than for the
+screen, with every row shown including collapsed ones. The SVG is vector, so it scales
+cleanly into a report or a poster. CSV gives the table with outline numbers, dates and
+dependencies.
 
-Practical habits that help:
+## Adding or removing people
 
-- Save often. Small commits collide less.
-- During planning, when everyone's in it at once, agree that one person drives.
-- To see what changed: the repo's commit history on `schedule.json`.
-- To roll back: revert the commit, or restore an older version of the file.
+Anyone with a vt.edu Google account can open it. To narrow that to specific people,
+replace the rules with an allow list:
 
----
-
-## Data format
-
-```jsonc
+```json
 {
-  "project": "Example Project",
-  "project_start": "2026-09-14",     // where unconstrained tasks begin
-  "holidays": ["2026-11-26"],        // non-working days
-  "tasks": [
-    {
-      "id": 3,                       // stable; what Pred. references
-      "text": "Requirements",
-      "parent": 1,                   // 0 = top level; a row with children is a summary
-      "duration": 5,                 // working days; 0 or type "milestone" for a diamond
-      "progress": 0.4,               // 0–1
-      "type": "task",                // "task" | "milestone"
-      "constraint_date": null        // "YYYY-MM-DD" pins the start
-    }
-  ],
-  "links": [
-    { "id": 1, "source": 3, "target": 4, "type": "0", "lag": 0 }
-    // type: "0" FS, "1" SS, "2" FF, "3" SF. lag is in working days, may be negative.
-  ]
+  "rules": {
+    "schedule": {
+      ".read": "auth != null && auth.token.email_verified == true && root.child('members').child(auth.token.email.replace('.', ',')).exists()",
+      ".write": "auth != null && auth.token.email_verified == true && root.child('members').child(auth.token.email.replace('.', ',')).exists()"
+    },
+    "members": { ".read": "auth != null", ".write": false }
+  }
 }
 ```
 
-The file is plain JSON, so you can also edit it directly, generate it from a script,
-or diff it in a pull request.
-
----
+Then add each person under `members` in the database as a key like `jsmith@vt,edu` set
+to `true`. Dots become commas because Firebase keys cannot contain a dot.
 
 ## Limits worth knowing
 
-- **Dependencies attach to leaf tasks, not summary rows.** Link the children. The page
-  warns you if a link touches a summary.
-- **No resource levelling, baselines, or cost tracking.** This is a schedule, not a
-  PM suite. If you need those, you need Project or something like it.
-- **Public repo means a public schedule.** GitHub Pages on a free account only serves
-  public repos. If the plan is sensitive, either use a paid plan (Pages can serve
-  private repos on Pro/Team), or keep the repo private, skip Pages, and have everyone
-  run the folder locally with `python3 -m http.server`. In that setup *everyone* needs
-  a token, including viewers — with a token the page reads through the GitHub API
-  rather than off the Pages site.
-- **Circular dependencies** are detected and reported rather than fixed. The tasks
-  involved stay at their own dates until you break the loop.
+- No version history. Undo covers the last 30 changes in your own browser, but there is
+  no way to see what the schedule looked like last Tuesday.
+- No resource levelling, cost tracking or baselines. This is a schedule, not a full
+  project management suite.
+- Free Firebase covers this easily. The Spark plan allows 1 GB of storage and 100
+  people connected at once, and a schedule like this is around 50 KB.
+- Best on a laptop. It works on a tablet but the drag interactions want a mouse.
 
-## Under the hood
+## Notes for whoever maintains it
 
-The chart is [DHTMLX Gantt Community Edition](https://github.com/DHTMLX/gantt) 10.0.3,
-MIT-licensed, loaded from a CDN. It draws the grid, bars and dependency arrows.
+`scheduler.js` is pure and has no dependencies, so it can be tested on its own. The
+scheduling is a working day calendar plus a topological sort over the dependency graph
+and a forward pass for dates. Durations are integers indexing into the calendar, which
+is what makes weekend and holiday handling fall out for free.
 
-Its automatic scheduling and critical-path features are PRO-only, so `app.js`
-implements those: a working-day calendar, a topological sort over the dependency
-graph, then a forward pass for early dates and a backward pass for total float —
-standard CPM, about 200 lines. That's also why the schedule is recomputed from the
-dependency network on every edit rather than stored as fixed dates.
+`app.js` re-renders the grid and timeline whenever data changes. During a drag it moves
+only the element being dragged and commits once on release, so nothing flickers.
 
-To pin the library version or work offline, download
-`codebase/dhtmlxgantt.js` and `.css` from the npm package into the repo and point
-`index.html` at the local copies.
+Colours live on the top level phase row and every descendant inherits, which is why the
+swatch only appears on phases.
