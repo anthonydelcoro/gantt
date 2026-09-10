@@ -1,5 +1,5 @@
 {
-  "project": "Example Project",
+  "project": "IDC Aerospace",
   "project_start": "2026-09-14",
   "holidays": [
     "2026-11-26",
@@ -7,39 +7,251 @@
     "2026-12-25"
   ],
   "tasks": [
-    { "id": 1, "text": "Planning", "parent": 0, "duration": 1 },
-    { "id": 2, "text": "Kickoff", "parent": 1, "duration": 0, "type": "milestone", "constraint_date": "2026-09-14" },
-    { "id": 3, "text": "Requirements", "parent": 1, "duration": 5, "progress": 0 },
-    { "id": 4, "text": "Scope sign-off", "parent": 1, "duration": 2, "progress": 0 },
-
-    { "id": 5, "text": "Design", "parent": 0, "duration": 1 },
-    { "id": 6, "text": "Concept drawings", "parent": 5, "duration": 8, "progress": 0 },
-    { "id": 7, "text": "Detailed design", "parent": 5, "duration": 12, "progress": 0 },
-    { "id": 8, "text": "Design review", "parent": 5, "duration": 3, "progress": 0 },
-
-    { "id": 9, "text": "Procurement", "parent": 0, "duration": 1 },
-    { "id": 10, "text": "Issue RFQ", "parent": 9, "duration": 2, "progress": 0 },
-    { "id": 11, "text": "Vendor lead time", "parent": 9, "duration": 20, "progress": 0 },
-
-    { "id": 12, "text": "Build", "parent": 0, "duration": 1 },
-    { "id": 13, "text": "Fabrication", "parent": 12, "duration": 15, "progress": 0 },
-    { "id": 14, "text": "Assembly", "parent": 12, "duration": 10, "progress": 0 },
-    { "id": 15, "text": "Testing", "parent": 12, "duration": 6, "progress": 0 },
-
-    { "id": 16, "text": "Handover", "parent": 0, "duration": 0, "type": "milestone" }
+    {
+      "id": 1,
+      "text": "Planning",
+      "parent": 0,
+      "duration": 1,
+      "progress": 0,
+      "type": "task",
+      "constraint_date": null,
+      "start_date": null
+    },
+    {
+      "id": 2,
+      "text": "Kickoff",
+      "parent": 1,
+      "duration": 0,
+      "progress": 0,
+      "type": "milestone",
+      "constraint_date": "2026-09-14",
+      "start_date": null
+    },
+    {
+      "id": 3,
+      "text": "Requirements",
+      "parent": 1,
+      "duration": 5,
+      "progress": 0,
+      "type": "task",
+      "constraint_date": null,
+      "start_date": null
+    },
+    {
+      "id": 4,
+      "text": "Scope sign-off",
+      "parent": 1,
+      "duration": 2,
+      "progress": 0,
+      "type": "task",
+      "constraint_date": null,
+      "start_date": null
+    },
+    {
+      "id": 5,
+      "text": "Design",
+      "parent": 0,
+      "duration": 1,
+      "progress": 0,
+      "type": "task",
+      "constraint_date": null,
+      "start_date": null
+    },
+    {
+      "id": 6,
+      "text": "Concept drawings",
+      "parent": 5,
+      "duration": 8,
+      "progress": 0,
+      "type": "task",
+      "constraint_date": null,
+      "start_date": null
+    },
+    {
+      "id": 7,
+      "text": "Detailed design",
+      "parent": 5,
+      "duration": 12,
+      "progress": 0,
+      "type": "task",
+      "constraint_date": null,
+      "start_date": null
+    },
+    {
+      "id": 8,
+      "text": "Design review",
+      "parent": 5,
+      "duration": 3,
+      "progress": 0,
+      "type": "task",
+      "constraint_date": null,
+      "start_date": null
+    },
+    {
+      "id": 9,
+      "text": "Procurement",
+      "parent": 0,
+      "duration": 1,
+      "progress": 0,
+      "type": "task",
+      "constraint_date": null,
+      "start_date": null
+    },
+    {
+      "id": 10,
+      "text": "Issue RFQ",
+      "parent": 9,
+      "duration": 2,
+      "progress": 0,
+      "type": "task",
+      "constraint_date": null,
+      "start_date": null
+    },
+    {
+      "id": 11,
+      "text": "Vendor lead time",
+      "parent": 9,
+      "duration": 20,
+      "progress": 0,
+      "type": "task",
+      "constraint_date": null,
+      "start_date": null
+    },
+    {
+      "id": 12,
+      "text": "Build",
+      "parent": 0,
+      "duration": 1,
+      "progress": 0,
+      "type": "task",
+      "constraint_date": null,
+      "start_date": null
+    },
+    {
+      "id": 13,
+      "text": "Fabrication",
+      "parent": 12,
+      "duration": 15,
+      "progress": 0,
+      "type": "task",
+      "constraint_date": null,
+      "start_date": null
+    },
+    {
+      "id": 14,
+      "text": "Assembly",
+      "parent": 12,
+      "duration": 10,
+      "progress": 0,
+      "type": "task",
+      "constraint_date": null,
+      "start_date": null
+    },
+    {
+      "id": 15,
+      "text": "Testing",
+      "parent": 12,
+      "duration": 6,
+      "progress": 0,
+      "type": "task",
+      "constraint_date": null,
+      "start_date": null
+    },
+    {
+      "id": 16,
+      "text": "Handover",
+      "parent": 0,
+      "duration": 0,
+      "progress": 0,
+      "type": "milestone",
+      "constraint_date": null,
+      "start_date": null
+    }
   ],
   "links": [
-    { "id": 1, "source": 2, "target": 3, "type": "0", "lag": 0 },
-    { "id": 2, "source": 3, "target": 4, "type": "0", "lag": 0 },
-    { "id": 3, "source": 4, "target": 6, "type": "0", "lag": 0 },
-    { "id": 4, "source": 6, "target": 7, "type": "0", "lag": 0 },
-    { "id": 5, "source": 7, "target": 8, "type": "0", "lag": 0 },
-    { "id": 6, "source": 7, "target": 10, "type": "1", "lag": 5 },
-    { "id": 7, "source": 10, "target": 11, "type": "0", "lag": 0 },
-    { "id": 8, "source": 8, "target": 13, "type": "0", "lag": 0 },
-    { "id": 9, "source": 11, "target": 14, "type": "0", "lag": 0 },
-    { "id": 10, "source": 13, "target": 14, "type": "0", "lag": 0 },
-    { "id": 11, "source": 14, "target": 15, "type": "0", "lag": 0 },
-    { "id": 12, "source": 15, "target": 16, "type": "0", "lag": 0 }
+    {
+      "id": 1,
+      "source": 2,
+      "target": 3,
+      "type": "0",
+      "lag": 0
+    },
+    {
+      "id": 2,
+      "source": 3,
+      "target": 4,
+      "type": "0",
+      "lag": 0
+    },
+    {
+      "id": 3,
+      "source": 4,
+      "target": 6,
+      "type": "0",
+      "lag": 0
+    },
+    {
+      "id": 4,
+      "source": 6,
+      "target": 7,
+      "type": "0",
+      "lag": 0
+    },
+    {
+      "id": 5,
+      "source": 7,
+      "target": 8,
+      "type": "0",
+      "lag": 0
+    },
+    {
+      "id": 6,
+      "source": 7,
+      "target": 10,
+      "type": "1",
+      "lag": 5
+    },
+    {
+      "id": 7,
+      "source": 10,
+      "target": 11,
+      "type": "0",
+      "lag": 0
+    },
+    {
+      "id": 8,
+      "source": 8,
+      "target": 13,
+      "type": "0",
+      "lag": 0
+    },
+    {
+      "id": 9,
+      "source": 11,
+      "target": 14,
+      "type": "0",
+      "lag": 0
+    },
+    {
+      "id": 10,
+      "source": 13,
+      "target": 14,
+      "type": "0",
+      "lag": 0
+    },
+    {
+      "id": 11,
+      "source": 14,
+      "target": 15,
+      "type": "0",
+      "lag": 0
+    },
+    {
+      "id": 12,
+      "source": 15,
+      "target": 16,
+      "type": "0",
+      "lag": 0
+    }
   ]
 }
