@@ -215,6 +215,24 @@
 
     .hgrip:hover { background: rgba(47, 111, 235, .25); }
 
+    .hcell[data-col] { cursor: grab; }
+    .hcell.drop-left { box-shadow: inset 2px 0 0 var(--blue); }
+    .hcell.drop-right { box-shadow: inset -2px 0 0 var(--blue); }
+
+    /* always present so rows can still be dragged with the number column hidden */
+    .rowgrip {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 6px;
+      cursor: grab;
+      z-index: 2;
+    }
+
+    .row:hover .rowgrip { background: linear-gradient(var(--line), var(--line)); }
+    .rowgrip:active { cursor: grabbing; }
+
     #addPhase {
       border: 0;
       background: transparent;
@@ -307,8 +325,11 @@
       border: 1px solid rgba(0, 0, 0, .12);
     }
 
-    .cell-wbs { color: var(--muted); font-size: 12px; letter-spacing: .2px; }
-    .row.summary .cell-wbs { color: var(--ink); }
+    .cell-wbs { color: var(--ink); font-size: 12px; letter-spacing: .2px; }
+
+    .outline { color: var(--faint); font-size: 11.5px; }
+    .row.summary .outline { color: var(--muted); }
+    .namelabel { cursor: text; }
 
     .nametext { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .nametext.milestone::after { content: ' ◆'; color: var(--muted); font-size: 10px; }
@@ -607,6 +628,8 @@
       </div>
 
       <button class="tbtn" id="btnToday">Today</button>
+      <button class="tbtn" id="btnExpand" title="Open every phase">Expand all</button>
+      <button class="tbtn" id="btnCollapse" title="Fold every phase up">Collapse all</button>
 
       <div class="grow"></div>
 

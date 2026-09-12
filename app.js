@@ -20,9 +20,9 @@ const ZOOM = {
 };
 
 const COLS = [
-  { key: 'num', label: '', w: 36, min: 30, required: true },
+  { key: 'num', label: '', w: 36, min: 30 },
   { key: 'name', label: 'Task Name', w: 248, min: 130, required: true },
-  { key: 'wbs', label: 'WBS', w: 64, min: 40 },
+  { key: 'wbs', label: 'WBS', w: 72, min: 40 },
   { key: 'owner', label: 'Responsible', w: 112, min: 60 },
   { key: 'duration', label: 'Days', w: 54, min: 44, align: 'center' },
   { key: 'start', label: 'Start', w: 84, min: 64, align: 'center' },
@@ -40,7 +40,7 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 
 /* Which build is running. Shown in the Account menu so there is never any
    doubt about whether a deploy actually landed. */
-const BUILD = '2026-09-11a';
+const BUILD = '2026-09-11b';
 
 /* ==========================================================================
    State
@@ -70,6 +70,10 @@ const el = id => document.getElementById(id);
 function loadPrefs() {
   try {
     const p = JSON.parse(localStorage.getItem('gantt.prefs') || '{}');
+    if (p.order) {
+      const rank = new Map(p.order.map((k, i) => [k, i]));
+      COLS.sort((a, b) => (rank.get(a.key) ?? 99) - (rank.get(b.key) ?? 99));
+    }
     if (p.widths) COLS.forEach(c => { if (p.widths[c.key]) c.w = p.widths[c.key]; });
     if (p.hidden) COLS.forEach(c => { c.hidden = !c.required && !!p.hidden[c.key]; });
     if (p.zoom && ZOOM[p.zoom]) S.zoom = p.zoom;
@@ -81,8 +85,9 @@ function savePrefs() {
   try {
     const widths = {}, hidden = {};
     COLS.forEach(c => { widths[c.key] = c.w; if (c.hidden) hidden[c.key] = true; });
-    localStorage.setItem('gantt.prefs',
-      JSON.stringify({ widths, hidden, zoom: S.zoom, exportOpts: S.exportOpts }));
+    localStorage.setItem('gantt.prefs', JSON.stringify({
+      widths, hidden, order: COLS.map(c => c.key), zoom: S.zoom, exportOpts: S.exportOpts
+    }));
   } catch (e) { /* private browsing */ }
 }
 
@@ -285,7 +290,13 @@ function renderHead() {
     d.className = 'hcell' + (c.key === 'num' ? ' num' : '') +
       (c.align === 'center' ? ' center' : '');
     d.style.width = c.w + 'px';
+    d.dataset.col = c.key;
     d.textContent = c.label;
+    d.title = c.label ? `${c.label}. Drag to move, right click for the column list.` : '';
+    d.addEventListener('mousedown', e => {
+      if (e.target !== d) return;           // the grip and the plus handle themselves
+      startHeaderDrag(e, c);
+    });
 
     if (c.key === 'name') {
       const add = document.createElement('button');
@@ -358,8 +369,15 @@ function renderRows() {
 
           const label = document.createElement('span');
           label.className = 'nametext' + (t.isMilestone ? ' milestone' : '');
-          label.textContent = t.text || '';
-          label.addEventListener('click', e => { e.stopPropagation(); editText(t.id, label); });
+          const outline = document.createElement('span');
+          outline.className = 'outline';
+          outline.textContent = codes.get(t.id) || '';
+          const text = document.createElement('span');
+          text.className = 'namelabel';
+          text.textContent = t.text || '';
+          label.append(outline, document.createTextNode(' '), text);
+          /* the editor opens over the name itself, not the number in front of it */
+          label.addEventListener('click', e => { e.stopPropagation(); editText(t.id, text); });
           cell.appendChild(label);
 
           const btns = document.createElement('span');
@@ -376,7 +394,11 @@ function renderRows() {
         }
 
         case 'wbs':
-          cell.innerHTML = `<span class="cell-wbs">${escapeHTML(codes.get(t.id) || '')}</span>`;
+          cell.classList.add('editable');
+          cell.innerHTML = t.wbs
+            ? `<span class="cell-wbs">${escapeHTML(t.wbs)}</span>`
+            : '<span class="hint">&mdash;</span>';
+          cell.addEventListener('click', () => editWbs(t.id, cell));
           break;
 
         case 'owner':
@@ -434,6 +456,12 @@ function renderRows() {
       }
       div.appendChild(cell);
     }
+
+    const grip = document.createElement('span');
+    grip.className = 'rowgrip';
+    grip.title = 'Drag to move this row';
+    grip.addEventListener('mousedown', e => startRowDrag(e, t.id));
+    div.appendChild(grip);
 
     div.addEventListener('mousedown', () => select(t.id));
     frag.appendChild(div);
@@ -844,6 +872,16 @@ function editText(id, anchor) {
   });
 }
 
+function editWbs(id, cell) {
+  const t = byId(id);
+  openEditor(cell, t.wbs || '', 'text', v => {
+    const next = v.trim();
+    if (next === (t.wbs || '')) return;
+    snapshot();
+    store.patchTask(id, { wbs: next || null });
+  });
+}
+
 function editOwner(id, cell) {
   const t = byId(id);
   openEditor(cell, t.owner || '', 'text', v => {
@@ -1035,6 +1073,21 @@ function openLinkMenu(ev, link, fromName, toName) {
     del.addEventListener('click', () => { close(); removeLinkById(link.id); });
     m.appendChild(del);
   });
+}
+
+/* Open or close every phase at once. This is shared state, so it changes the
+   view for anyone else looking at the chart too. */
+function setAllOpen(open) {
+  const kids = childrenOf(S.computed.tasks);
+  const patch = {};
+  for (const t of S.computed.tasks) {
+    if ((kids.get(t.id) || []).length && (t.open !== false) !== open) {
+      patch[`tasks/${t.id}/open`] = open;
+    }
+  }
+  if (!Object.keys(patch).length) return;
+  snapshot();
+  store.applyPatch(patch);
 }
 
 function indent() {
@@ -1311,6 +1364,37 @@ function applyRowMove(id, drop) {
    Column resizing and the split
    ========================================================================== */
 
+function startHeaderDrag(e, col) {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  const head = el('gridHead');
+  let drop = null;
+
+  const clear = () => head.querySelectorAll('.hcell')
+    .forEach(h => h.classList.remove('drop-left', 'drop-right'));
+
+  dragSession(ev => {
+    clear();
+    drop = null;
+    const over = document.elementFromPoint(ev.clientX, ev.clientY);
+    const cell = over && over.closest && over.closest('.hcell');
+    if (!cell || cell.dataset.col === col.key) return;
+    const r = cell.getBoundingClientRect();
+    const before = (ev.clientX - r.left) < r.width / 2;
+    cell.classList.add(before ? 'drop-left' : 'drop-right');
+    drop = { key: cell.dataset.col, before };
+  }, () => {
+    clear();
+    if (!drop) return;
+    const from = COLS.indexOf(col);
+    COLS.splice(from, 1);
+    const targetAt = COLS.findIndex(c => c.key === drop.key);
+    COLS.splice(drop.before ? targetAt : targetAt + 1, 0, col);
+    savePrefs();
+    render();
+  });
+}
+
 function startColumnResize(e, col) {
   e.preventDefault();
   e.stopPropagation();
@@ -1510,6 +1594,8 @@ function wireChrome() {
   [...el('zoom').children].forEach(c => c.classList.toggle('on', c.dataset.z === S.zoom));
 
   el('btnToday').addEventListener('click', scrollToToday);
+  el('btnExpand').addEventListener('click', () => setAllOpen(true));
+  el('btnCollapse').addEventListener('click', () => setAllOpen(false));
   el('btnExport').addEventListener('click', e => openExportMenu(e.currentTarget.getBoundingClientRect()));
   el('btnAccount').addEventListener('click', e => openAccountMenu(e.currentTarget.getBoundingClientRect()));
 
@@ -1772,7 +1858,7 @@ function cellValue(key, row, codes) {
   switch (key) {
     case 'num': return row.index + 1;
     case 'name': return t.text || '';
-    case 'wbs': return codes.get(t.id) || '';
+    case 'wbs': return t.wbs || '';
     case 'owner': return t.owner || '';
     case 'duration': return t.isMilestone ? '' : t.duration;
     case 'start': return fmtDate(t.start);
@@ -1906,13 +1992,30 @@ function buildSVG() {
     let cxx = PAD;
     for (const col of cols) {
       const indent = col.key === 'name' ? r.depth * 12 : 0;
-      const text = fitText(cellValue(col.key, r, codes), col.w - indent, FONT);
-      if (text !== '') {
-        const centred = col.align === 'center';
-        s.push(`<text x="${n(centred ? cxx + col.w / 2 : cxx + 5 + indent)}" y="${cy}" font-size="${FONT}" ` +
-          `fill="${(col.key === 'num' || col.key === 'wbs') ? '#97a1ad' : '#16202c'}"` +
-          (centred ? ' text-anchor="middle"' : '') +
-          (t.isSummary ? ' font-weight="700"' : '') + `>${esc(text)}</text>`);
+      const centred = col.align === 'center';
+      const tx = n(centred ? cxx + col.w / 2 : cxx + 5 + indent);
+      const weight = t.isSummary ? ' font-weight="700"' : '';
+      const anchor = centred ? ' text-anchor="middle"' : '';
+
+      if (col.key === 'name') {
+        /* the outline number rides in front of the name, greyed, as on screen */
+        const code = codes.get(t.id) || '';
+        const lead = code ? code + ' ' : '';
+        const full = fitText(lead + (t.text || ''), col.w - indent, FONT);
+        if (full !== '') {
+          const shown = full.startsWith(lead) ? full.slice(lead.length) : full;
+          const prefix = full.startsWith(lead) && code
+            ? `<tspan fill="#97a1ad">${esc(code)}</tspan> ` : '';
+          s.push(`<text x="${tx}" y="${cy}" font-size="${FONT}" fill="#16202c"${weight}>` +
+            prefix + esc(shown) + '</text>');
+        }
+      } else {
+        const text = fitText(cellValue(col.key, r, codes), col.w - indent, FONT);
+        if (text !== '') {
+          s.push(`<text x="${tx}" y="${cy}" font-size="${FONT}" ` +
+            `fill="${(col.key === 'num' || col.key === 'wbs') ? '#97a1ad' : '#16202c'}"` +
+            anchor + weight + `>${esc(text)}</text>`);
+        }
       }
       cxx += col.w;
     }

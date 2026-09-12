@@ -65,6 +65,8 @@ block module loading and sign in popups from `file://`.
 | Undo | Ctrl or Cmd Z |
 | Show or hide a column | Right click the column headers, or Account, Columns to show |
 | Resize a column | Drag the divider in the header, like a spreadsheet |
+| Move a column | Drag its header left or right |
+| Open or fold everything | Expand all and Collapse all in the top bar |
 
 **Colors** live on the phase row. Click the small square to the left of a phase name
 and pick one of the eight presets or open the custom picker underneath them. The chart
@@ -117,16 +119,34 @@ Dependencies attach to individual tasks, not to phase rows. If you try to link a
 the app tells you and asks you to link the tasks inside it. Links that would create a
 loop are refused when you draw them.
 
-## Columns
+## Columns and numbering
 
 The grid shows a row number, Task Name, WBS, Responsible, Days, Start, Finish and
-% Done. WBS is the outline number and is worked out automatically from where a row sits
-in the tree, so it renumbers itself when you move things around.
+% Done.
 
-Drag the dividers in the header to resize, the same as a spreadsheet. Right click the
-headers to switch columns off. Task Name and the row number stay put, because the tree
-and the drag handle live on them. Both the widths and the hidden columns are stored in
-your own browser, so hiding a column does not change what anyone else sees.
+There are two kinds of numbering and they do different jobs.
+
+The **outline number** in front of each task name is worked out from where the row sits
+in the tree, so it renumbers itself whenever you move or nest something. It tells you
+the shape of the plan at a glance and you cannot edit it.
+
+The **WBS column** is yours. Type whatever your project actually uses, a real work
+breakdown code, a drawing number, a deliverable reference. It is attached to the task,
+so it follows the row when you drag it somewhere else and does not change when
+everything around it renumbers. Leave it blank if you do not need it, or hide the column
+entirely.
+
+Drag the dividers in the header to resize, the same as a spreadsheet. Drag a header
+sideways to move that column. Right click the headers to switch columns off. Only Task
+Name is fixed, because the tree lives on it. If you hide the row numbers you can still
+drag rows around using the thin strip at the very left edge of each row.
+
+Widths, order and hidden columns are stored in your own browser, so none of it changes
+what anyone else sees.
+
+**Expand all** and **Collapse all** in the top bar open or fold every phase at once.
+Unlike the column settings, this one is shared, because which rows are folded is stored
+with the schedule.
 
 ## Exports
 
