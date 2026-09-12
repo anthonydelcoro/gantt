@@ -67,6 +67,7 @@ block module loading and sign in popups from `file://`.
 | Resize a column | Drag the divider in the header, like a spreadsheet |
 | Move a column | Drag its header left or right |
 | Open or fold everything | Expand all and Collapse all in the top bar |
+| Write names or owners on the chart | Task on chart and Responsible on chart in the top bar |
 
 **Colors** live on the phase row. Click the small square to the left of a phase name
 and pick one of the eight presets or open the custom picker underneath them. The chart
@@ -143,6 +144,17 @@ drag rows around using the thin strip at the very left edge of each row.
 
 Widths, order and hidden columns are stored in your own browser, so none of it changes
 what anyone else sees.
+
+**Task on chart** and **Responsible on chart** write the task name, the person
+responsible, or both, beside each bar on the timeline. They are independent, so you can
+have owners on the chart without the names repeated from the table. Each label is placed
+clear of any dependency arrow crossing that row, rather than sitting on top of the lines.
+Both carry through to the export, which widens itself to make room rather than clipping
+a long label. Like the column settings, these are per browser.
+
+**Outline numbers** can be switched off in the same right click menu as the columns. That
+hides the 1, 1.1, 1.1.1 in front of each task name without touching the WBS column you
+type into yourself.
 
 **Expand all** and **Collapse all** in the top bar open or fold every phase at once.
 Unlike the column settings, this one is shared, because which rows are folded is stored

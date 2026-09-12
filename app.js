@@ -40,7 +40,7 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 
 /* Which build is running. Shown in the Account menu so there is never any
    doubt about whether a deploy actually landed. */
-const BUILD = '2026-09-11c';
+const BUILD = '2026-09-12a';
 
 /* ==========================================================================
    State
@@ -61,7 +61,9 @@ const S = {
   ready: false,
   undo: [],
   suppressUndo: false,
-  exportOpts: { allColumns: false, allRows: false, visibleRangeOnly: false }
+  exportOpts: { allColumns: false, allRows: false, visibleRangeOnly: false },
+  labels: { name: false, owner: false },
+  showOutline: true
 };
 
 const el = id => document.getElementById(id);
@@ -78,6 +80,8 @@ function loadPrefs() {
     if (p.hidden) COLS.forEach(c => { c.hidden = !c.required && !!p.hidden[c.key]; });
     if (p.zoom && ZOOM[p.zoom]) S.zoom = p.zoom;
     if (p.exportOpts) Object.assign(S.exportOpts, p.exportOpts);
+    if (p.labels) Object.assign(S.labels, p.labels);
+    if (p.showOutline !== undefined) S.showOutline = !!p.showOutline;
   } catch (e) { /* first run */ }
 }
 
@@ -86,7 +90,8 @@ function savePrefs() {
     const widths = {}, hidden = {};
     COLS.forEach(c => { widths[c.key] = c.w; if (c.hidden) hidden[c.key] = true; });
     localStorage.setItem('gantt.prefs', JSON.stringify({
-      widths, hidden, order: COLS.map(c => c.key), zoom: S.zoom, exportOpts: S.exportOpts
+      widths, hidden, order: COLS.map(c => c.key), zoom: S.zoom,
+      exportOpts: S.exportOpts, labels: S.labels, showOutline: S.showOutline
     }));
   } catch (e) { /* private browsing */ }
 }
@@ -221,6 +226,14 @@ function descendantsOf(id) {
 function linksTouching(ids) {
   const set = new Set(ids);
   return S.links.filter(l => set.has(l.source) || set.has(l.target)).map(l => l.id);
+}
+
+/* Text drawn beside a bar on the chart. Empty when both toggles are off. */
+function barLabel(t) {
+  const parts = [];
+  if (S.labels.name) parts.push(t.text || '');
+  if (S.labels.owner && t.owner) parts.push(t.owner);
+  return parts.filter(Boolean).join('   ');
 }
 
 function gridWidth() { return visibleCols().reduce((a, c) => a + c.w, 0); }
@@ -369,13 +382,16 @@ function renderRows() {
 
           const label = document.createElement('span');
           label.className = 'nametext' + (t.isMilestone ? ' milestone' : '');
-          const outline = document.createElement('span');
-          outline.className = 'outline';
-          outline.textContent = codes.get(t.id) || '';
           const text = document.createElement('span');
           text.className = 'namelabel';
           text.textContent = t.text || '';
-          label.append(outline, document.createTextNode(' '), text);
+          if (S.showOutline) {
+            const outline = document.createElement('span');
+            outline.className = 'outline';
+            outline.textContent = codes.get(t.id) || '';
+            label.append(outline, document.createTextNode(' '));
+          }
+          label.append(text);
           /* the editor opens over the name itself, not the number in front of it */
           label.addEventListener('click', e => { e.stopPropagation(); editText(t.id, text); });
           cell.appendChild(label);
@@ -522,21 +538,50 @@ function renderTimeline() {
   const z = ZOOM[S.zoom];
   const range = S.range = timelineRange();
   const px = S.px = z.px;
-  const width = Math.ceil(range.days * px);
+  const scaleW = Math.ceil(range.days * px);
   const height = S.rows.length * ROW_H;
 
   const x = isoStr => Math.round(daysBetween(range.from, isoStr) * px);
 
   /* ---- header ---- */
+  /* geometry first, so labels can be placed clear of the arrows */
+  S.geom.clear();
+  const plan = S.rows.map((row, i) => {
+    const t = row.task;
+    const left = x(t.start);
+    const right = t.isMilestone ? left : x(iso(addDays(parseISO(t.finish), 1)));
+    const w = Math.max(t.isMilestone ? 13 : 4, right - left);
+    const g = {
+      x1: t.isMilestone ? left - 6 : left,
+      x2: t.isMilestone ? left + 7 : left + w,
+      y: i * ROW_H + ROW_H / 2, row: i
+    };
+    S.geom.set(t.id, g);
+    return { t, i, left, w, g };
+  });
+
+  const obstacles = arrowObstacles(S.computed.links, S.geom, ROW_H, S.rows.length,
+    r => r * ROW_H + ROW_H / 2);
+
+  let labelRight = 0;
+  for (const b of plan) {
+    b.label = barLabel(b.t);
+    if (!b.label) continue;
+    b.labelX = clearLabelX(b.g.x2, b.label.length * 6.2, obstacles.get(b.i));
+    labelRight = Math.max(labelRight, b.labelX + b.label.length * 6.2);
+  }
+
+  const width = Math.max(scaleW, Math.ceil(labelRight) + 16);
+
   const head = el('tlHead');
   head.style.width = width + 'px';
   head.innerHTML = '';
   const top = document.createElement('div');
   top.className = 'scale-top';
-  top.style.width = width + 'px';
+  top.style.width = scaleW + 'px';
   const bot = document.createElement('div');
   bot.className = 'scale-bot';
-  bot.style.width = width + 'px';
+  bot.style.width = scaleW + 'px';
 
   const stick = (left, w, text, cls) => {
     const s = document.createElement('div');
@@ -659,14 +704,9 @@ function renderTimeline() {
   frag.appendChild(svg);
 
   /* bars */
-  S.geom.clear();
-  S.rows.forEach((row, i) => {
-    const t = row.task;
+  plan.forEach(({ t, i, left, w }) => {
     const bar = document.createElement('div');
     const y = i * ROW_H;
-    const left = x(t.start);
-    const right = t.isMilestone ? left : x(iso(addDays(parseISO(t.finish), 1)));
-    const w = Math.max(t.isMilestone ? 13 : 4, right - left);
 
     bar.className = 'bar' + (t.isSummary ? ' summary' : '') + (t.isMilestone ? ' milestone' : '');
     bar.dataset.id = t.id;
@@ -674,6 +714,13 @@ function renderTimeline() {
     bar.style.top = (y + (t.isSummary ? 10 : t.isMilestone ? 8 : 7)) + 'px';
     if (!t.isMilestone) bar.style.width = w + 'px';
     if (!t.isSummary && !t.isMilestone) bar.style.background = t.colour || PALETTE[0];
+    if (t.isMilestone) {
+      /* the diamond is an inner element, so the drag handles below are not
+         rotated along with it */
+      const dia = document.createElement('span');
+      dia.className = 'dia';
+      bar.appendChild(dia);
+    }
 
     bar.title = `${t.text}\n${fmtDate(t.start)} to ${fmtDate(t.finish)}` +
       (t.isMilestone ? '' : `\n${t.duration} working day${t.duration === 1 ? '' : 's'}`) +
@@ -702,12 +749,17 @@ function renderTimeline() {
       bar.addEventListener('mousedown', e => startBarDrag(e, t.id));
     }
 
-    S.geom.set(t.id, {
-      x1: t.isMilestone ? left - 6 : left,
-      x2: t.isMilestone ? left + 7 : left + w,
-      y: y + ROW_H / 2, row: i
-    });
     frag.appendChild(bar);
+
+    const b = plan[i];
+    if (b.label) {
+      const lab = document.createElement('div');
+      lab.className = 'barlabel';
+      lab.style.left = Math.round(b.labelX) + 'px';
+      lab.style.top = (y + ROW_H / 2 - 8) + 'px';
+      lab.textContent = b.label;
+      frag.appendChild(lab);
+    }
   });
 
   canvas.appendChild(frag);
@@ -739,7 +791,7 @@ const maxISO = (a, b) => a > b ? a : b;
    task rather than hooking into its side. */
 const ARROW = { out: 11, lead: 18, gap: 5 };
 
-function linkPath(sx, sy, tx, ty, fromRight, enterRight, rowH) {
+function linkPoints(sx, sy, tx, ty, fromRight, enterRight, rowH) {
   const { out, lead, gap } = ARROW;
   const outX = sx + (fromRight ? out : -out);
   const tipX = enterRight ? tx + gap : tx - gap;
@@ -747,11 +799,71 @@ function linkPath(sx, sy, tx, ty, fromRight, enterRight, rowH) {
 
   /* go straight across when there is room for a full leader at that height */
   const room = enterRight ? leadX <= outX : leadX >= outX;
-  if (room) return `M${sx},${sy} H${outX} V${ty} H${tipX}`;
+  if (room) return [[sx, sy], [outX, sy], [outX, ty], [tipX, ty]];
 
   /* otherwise step out of the source row, run back, then come in level */
   const mid = ty >= sy ? sy + rowH / 2 : sy - rowH / 2;
-  return `M${sx},${sy} H${outX} V${mid} H${leadX} V${ty} H${tipX}`;
+  return [[sx, sy], [outX, sy], [outX, mid], [leadX, mid], [leadX, ty], [tipX, ty]];
+}
+
+function linkPath(sx, sy, tx, ty, fromRight, enterRight, rowH) {
+  const pts = linkPoints(sx, sy, tx, ty, fromRight, enterRight, rowH);
+  return pts.map(([x, y], i) =>
+    i === 0 ? 'M' + x + ',' + y : (pts[i - 1][1] === y ? 'H' + x : 'V' + y)).join(' ');
+}
+
+/* Which ends of a link the arrow joins, given its type. */
+function linkEnds(type) {
+  const t = String(type);
+  return { fromRight: !(t === '1' || t === '3'), enterRight: (t === '2' || t === '3') };
+}
+
+/* Every x where an arrow touches a given row, so a label can be placed
+   somewhere the lines are not. */
+function arrowObstacles(links, geom, rowH, rowCount, centerOf) {
+  const out = new Map();
+  const push = (r, x) => {
+    if (r < 0 || r >= rowCount) return;
+    const a = out.get(r) || [];
+    a.push(x);
+    out.set(r, a);
+  };
+
+  for (const l of links) {
+    const a = geom.get(l.source), b = geom.get(l.target);
+    if (!a || !b) continue;
+    const { fromRight, enterRight } = linkEnds(l.type);
+    const pts = linkPoints(fromRight ? a.x2 : a.x1, a.y,
+      enterRight ? b.x2 : b.x1, b.y, fromRight, enterRight, rowH);
+
+    for (let i = 1; i < pts.length; i++) {
+      const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+      if (y0 === y1) {
+        /* a horizontal run sits on one row */
+        const r = a.y === y0 ? a.row : (b.y === y0 ? b.row : null);
+        if (r !== null) push(r, Math.max(x0, x1));
+      } else {
+        /* a vertical run crosses every row between its ends */
+        const lo = Math.min(y0, y1), hi = Math.max(y0, y1);
+        for (let r = Math.min(a.row, b.row); r <= Math.max(a.row, b.row); r++) {
+          const cy = centerOf(r);
+          if (cy >= lo - 0.5 && cy <= hi + 0.5) push(r, x0);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/* Slide a label right until it clears the lines crossing its row. */
+function clearLabelX(barEnd, textWidth, obstacles) {
+  let x = barEnd + 12;
+  for (let i = 0; i < 8; i++) {
+    const hits = (obstacles || []).filter(o => o >= x - 4 && o <= x + textWidth + 4);
+    if (!hits.length) break;
+    x = Math.max(...hits) + 10;
+  }
+  return x;
 }
 
 function drawLinks() {
@@ -765,9 +877,7 @@ function drawLinks() {
     const a = S.geom.get(l.source), b = S.geom.get(l.target);
     if (!a || !b) continue;
 
-    const type = String(l.type);
-    const fromRight = !(type === '1' || type === '3');
-    const enterRight = (type === '2' || type === '3');
+    const { fromRight, enterRight } = linkEnds(l.type);
     const sx = fromRight ? a.x2 : a.x1;
     const tx = enterRight ? b.x2 : b.x1;
     const d = linkPath(sx, a.y, tx, b.y, fromRight, enterRight, ROW_H);
@@ -1151,7 +1261,10 @@ function startBarDrag(e, id) {
   const bar = e.currentTarget;
   const t = byId(id);
   const startX = e.clientX;
-  const originLeft = xOf(t.start);
+  /* work from the element's own position, because a milestone diamond is
+     centred on its day and so sits half a shape to the left of it */
+  const baseLeft = parseFloat(bar.style.left) || 0;
+  const baseX = xOf(t.start);
   let landing = t.start;
 
   dragSession(ev => {
@@ -1159,7 +1272,7 @@ function startBarDrag(e, id) {
     /* snap to a working day in the direction of travel, and put the bar
        exactly where it will end up so there is no jump on release */
     landing = snap(iso(addDays(parseISO(t.start), rawDays)), rawDays < 0 ? -1 : 1);
-    bar.style.left = (originLeft + (xOf(landing) - originLeft)) + 'px';
+    bar.style.left = (baseLeft + (xOf(landing) - baseX)) + 'px';
     bar.classList.add('ghost');
   }, () => {
     bar.classList.remove('ghost');
@@ -1508,6 +1621,24 @@ function openColumnMenu(e) {
       m.appendChild(row);
     }
 
+    m.appendChild(document.createElement('hr'));
+
+    const outlineRow = document.createElement('label');
+    outlineRow.style.cssText = 'display:flex;align-items:center;gap:9px;padding:5px 10px;' +
+      'cursor:pointer;font-size:13px;border-radius:6px;';
+    outlineRow.addEventListener('mouseenter', () => outlineRow.style.background = '#f3f6fa');
+    outlineRow.addEventListener('mouseleave', () => outlineRow.style.background = 'none');
+    const ocb = document.createElement('input');
+    ocb.type = 'checkbox';
+    ocb.checked = S.showOutline;
+    ocb.dataset.col = 'outline';
+    ocb.style.cssText = 'width:15px;height:15px;';
+    ocb.addEventListener('change', () => { S.showOutline = ocb.checked; savePrefs(); render(); });
+    const oname = document.createElement('span');
+    oname.textContent = 'Outline numbers (1, 1.1)';
+    outlineRow.append(ocb, oname);
+    m.appendChild(outlineRow);
+
     const note = document.createElement('div');
     note.style.cssText = 'padding:2px 10px 8px;font-size:11.5px;color:#97a1ad;max-width:220px;line-height:1.5;';
     note.textContent = 'This is per browser, so it does not change what anyone else sees.';
@@ -1594,6 +1725,19 @@ function wireChrome() {
   [...el('zoom').children].forEach(c => c.classList.toggle('on', c.dataset.z === S.zoom));
 
   el('btnToday').addEventListener('click', scrollToToday);
+  const labelBtn = (id, key) => {
+    const b = el(id);
+    b.classList.toggle('on', !!S.labels[key]);
+    b.addEventListener('click', () => {
+      S.labels[key] = !S.labels[key];
+      b.classList.toggle('on', S.labels[key]);
+      savePrefs();
+      render();
+    });
+  };
+  labelBtn('btnLabelName', 'name');
+  labelBtn('btnLabelOwner', 'owner');
+
   el('btnExpand').addEventListener('click', () => setAllOpen(true));
   el('btnCollapse').addEventListener('click', () => setAllOpen(false));
   el('btnExport').addEventListener('click', e => openExportMenu(e.currentTarget.getBoundingClientRect()));
@@ -1894,7 +2038,6 @@ function buildSVG() {
   const MAX_W = 12000;
   const px = Math.min(ZOOM[S.zoom].px, MAX_W / totalDays);
   const chartW = totalDays * px;
-  const W = LEFT + chartW + PAD * 2;
   const H = TITLE + HEAD + rows.length * ROW + PAD * 2 + 18;
 
   const x = d => PAD + LEFT + ((parseISO(d) - startD) / 86400000) * px;
@@ -1903,12 +2046,45 @@ function buildSVG() {
   const bottom = top + rows.length * ROW;
   const chartL = PAD + LEFT;
 
+  /* bar geometry up front, so labels can dodge the arrows the same way they do
+     on screen */
+  const geom = new Map();
+  rows.forEach((r, i) => {
+    const t = r.task;
+    const x1 = x(t.start);
+    const x2 = t.isMilestone ? x1 : x(iso(addDays(parseISO(t.finish), 1)));
+    const w = Math.max(3, x2 - x1);
+    const cy = top + i * ROW + ROW / 2;
+    geom.set(t.id, {
+      x1: t.isMilestone ? x1 - 6 : x1,
+      x2: t.isMilestone ? x1 + 6 : x1 + w,
+      y: cy, cy, row: i
+    });
+  });
+
+  const obstacles = arrowObstacles(c.links, geom, ROW, rows.length,
+    r => top + r * ROW + ROW / 2);
+
+  let labelRight = 0;
+  const labels = rows.map(r => {
+    const text = barLabel(r.task);
+    if (!text) return null;
+    const g = geom.get(r.task.id);
+    const wide = text.length * 5.6;
+    const lx = clearLabelX(g.x2, wide, obstacles.get(r.index));
+    labelRight = Math.max(labelRight, lx + wide);
+    return { text, x: lx };
+  });
+
+  const labelPad = labelRight ? Math.ceil(labelRight - (chartL + chartW)) + 14 : 0;
+  const W = LEFT + chartW + Math.max(0, labelPad) + PAD * 2;
+
   const s = [];
   s.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(W)}" height="${Math.round(H)}" viewBox="0 0 ${Math.round(W)} ${Math.round(H)}" font-family="Helvetica, Arial, sans-serif">`);
   s.push('<defs>' +
     '<marker id="ah" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">' +
     '<path d="M0,0 L7,3.5 L0,7 z" fill="#8b95a3"/></marker>' +
-    `<clipPath id="chart"><rect x="${chartL}" y="${top - HEAD}" width="${n(chartW)}" height="${bottom - top + HEAD}"/></clipPath>` +
+    `<clipPath id="chart"><rect x="${chartL}" y="${top - HEAD}" width="${n(chartW + labelPad)}" height="${bottom - top + HEAD}"/></clipPath>` +
     '</defs>');
   s.push('<rect width="100%" height="100%" fill="#ffffff"/>');
 
@@ -1918,7 +2094,7 @@ function buildSVG() {
   s.push(`<text x="${PAD}" y="${PAD + 36}" font-size="10.5" fill="#6b7684">${esc(bits.join('  \u00b7  '))}</text>`);
 
   rows.forEach((r, i) => {
-    if (i % 2) s.push(`<rect x="${PAD}" y="${top + i * ROW}" width="${n(LEFT + chartW)}" height="${ROW}" fill="#fafbfc"/>`);
+    if (i % 2) s.push(`<rect x="${PAD}" y="${top + i * ROW}" width="${n(LEFT + chartW + labelPad)}" height="${ROW}" fill="#fafbfc"/>`);
   });
 
   /* ---- chart, clipped so a narrowed date range cuts cleanly ---- */
@@ -1988,7 +2164,8 @@ function buildSVG() {
     s.push(`<line x1="${n(x(t0))}" y1="${top - 6}" x2="${n(x(t0))}" y2="${bottom}" stroke="#e0574f" stroke-width="1.2" stroke-dasharray="3 3"/>`);
   }
 
-  const pos = new Map();
+  const pos = geom;
+  const barShapes = [];
   rows.forEach((r, i) => {
     const t = r.task;
     const cy = top + i * ROW + ROW / 2;
@@ -1997,30 +2174,39 @@ function buildSVG() {
     const w = Math.max(3, x2 - x1);
 
     if (t.isMilestone) {
-      s.push(`<path d="M${n(x1)},${cy - 6} L${n(x1 + 6)},${cy} L${n(x1)},${cy + 6} L${n(x1 - 6)},${cy} Z" fill="#16202c"/>`);
-      pos.set(t.id, { x1: x1 - 6, x2: x1 + 6, cy });
+      barShapes.push(`<path d="M${n(x1)},${cy - 6} L${n(x1 + 6)},${cy} L${n(x1)},${cy + 6} L${n(x1 - 6)},${cy} Z" fill="#16202c"/>`);
     } else if (t.isSummary) {
-      s.push(`<rect x="${n(x1)}" y="${cy - 4}" width="${n(w)}" height="8" fill="#1f3a5f"/>`);
-      if (t.pct > 0) s.push(`<rect x="${n(x1)}" y="${cy - 1.5}" width="${n(w * t.pct / 100)}" height="3" fill="rgba(255,255,255,0.55)"/>`);
-      s.push(`<path d="M${n(x1)},${cy + 4} l0,5 l5,-5 z" fill="#1f3a5f"/>`);
-      s.push(`<path d="M${n(x1 + w)},${cy + 4} l0,5 l-5,-5 z" fill="#1f3a5f"/>`);
-      pos.set(t.id, { x1, x2: x1 + w, cy });
+      barShapes.push(`<rect x="${n(x1)}" y="${cy - 4}" width="${n(w)}" height="8" fill="#1f3a5f"/>`);
+      if (t.pct > 0) barShapes.push(`<rect x="${n(x1)}" y="${cy - 1.5}" width="${n(w * t.pct / 100)}" height="3" fill="rgba(255,255,255,0.55)"/>`);
+      barShapes.push(`<path d="M${n(x1)},${cy + 4} l0,5 l5,-5 z" fill="#1f3a5f"/>`);
+      barShapes.push(`<path d="M${n(x1 + w)},${cy + 4} l0,5 l-5,-5 z" fill="#1f3a5f"/>`);
     } else {
-      s.push(`<rect x="${n(x1)}" y="${cy - 7}" width="${n(w)}" height="14" rx="2.5" fill="${t.colour || PALETTE[0]}"/>`);
-      if (t.pct > 0) s.push(`<rect x="${n(x1)}" y="${cy - 2.5}" width="${n(w * t.pct / 100)}" height="5" fill="rgba(0,0,0,0.5)"/>`);
-      pos.set(t.id, { x1, x2: x1 + w, cy });
+      barShapes.push(`<rect x="${n(x1)}" y="${cy - 7}" width="${n(w)}" height="14" rx="2.5" fill="${t.colour || PALETTE[0]}"/>`);
+      if (t.pct > 0) barShapes.push(`<rect x="${n(x1)}" y="${cy - 2.5}" width="${n(w * t.pct / 100)}" height="5" fill="rgba(0,0,0,0.5)"/>`);
     }
   });
 
   for (const l of c.links) {
     const a = pos.get(l.source), b = pos.get(l.target);
     if (!a || !b) continue;
-    const type = String(l.type);
-    const fromRight = !(type === '1' || type === '3');
-    const enterRight = (type === '2' || type === '3');
+    const { fromRight, enterRight } = linkEnds(l.type);
     const sx = fromRight ? a.x2 : a.x1;
     const tx = enterRight ? b.x2 : b.x1;
     s.push(`<path d="${linkPath(sx, a.cy, tx, b.cy, fromRight, enterRight, ROW)}" fill="none" stroke="#8b95a3" stroke-width="1.1" marker-end="url(#ah)"/>`);
+  }
+
+  s.push(...barShapes);
+
+  if (S.labels.name || S.labels.owner) {
+    rows.forEach((r, i) => {
+      const t = r.task;
+      const text = barLabel(t);
+      if (!text) return;
+      const placed = labels[i];
+      if (!placed) return;
+      s.push(`<text x="${n(placed.x)}" y="${top + i * ROW + ROW / 2 + 3.5}" ` +
+        `font-size="9.5" fill="#5c6773">${esc(text)}</text>`);
+    });
   }
 
   s.push('</g>');
@@ -2049,7 +2235,7 @@ function buildSVG() {
 
       if (col.key === 'name') {
         /* the outline number rides in front of the name, greyed, as on screen */
-        const code = codes.get(t.id) || '';
+        const code = S.showOutline ? (codes.get(t.id) || '') : '';
         const lead = code ? code + ' ' : '';
         const full = fitText(lead + (t.text || ''), col.w - indent, FONT);
         if (full !== '') {
@@ -2189,4 +2375,7 @@ function starterSchedule() {
 
 /* A small hook for poking at the chart from the browser console, and for the
    test suite to check arrow geometry without screenshotting anything. */
-window.GanttApp = { linkPath, schedule, state: S, build: BUILD };
+window.GanttApp = {
+  linkPath, linkPoints, arrowObstacles, clearLabelX, barLabel,
+  schedule, state: S, build: BUILD
+};

@@ -86,6 +86,7 @@
     header {
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: 10px;
       padding: 7px 12px;
       border-bottom: 1px solid var(--line);
@@ -134,6 +135,7 @@
     }
 
     .tbtn:hover { background: var(--hover); }
+    .tbtn.on { background: var(--sel); border-color: #a9c4f5; color: #1b4fc4; font-weight: 600; }
 
     #people { display: flex; align-items: center; gap: -6px; }
 
@@ -487,21 +489,38 @@
     .bar.summary::before { left: 0; border-width: 6px 6px 0 0; }
     .bar.summary::after { right: 0; border-width: 6px 0 0 6px; }
 
+    /* the box stays square to the grid and only the inner shape is turned, so
+       the drag handles sit level with every other bar */
     .bar.milestone {
       width: 13px !important;
       height: 13px;
+      background: none !important;
+      box-shadow: none;
+    }
+
+    .bar.milestone .dia {
+      position: absolute;
+      inset: 0;
+      background: #16202c;
       border-radius: 2px;
       transform: rotate(45deg);
-      box-shadow: none;
-      background: #16202c !important;
     }
 
     .bar.milestone .fill, .bar.milestone .grip { display: none; }
-    .bar.milestone .knob { transform: rotate(-45deg); }
-    .bar.milestone .knob.l { left: -17px; }
-    .bar.milestone .knob.r { right: -17px; }
+    .bar.milestone .knob.l { left: -16px; }
+    .bar.milestone .knob.r { right: -16px; }
 
     .bar.ghost { opacity: .55; }
+
+    .barlabel {
+      position: absolute;
+      font-size: 11px;
+      line-height: 16px;
+      color: #5c6773;
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 6;
+    }
 
     #links { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 3; overflow: visible; }
     #links path.hit { stroke: transparent; stroke-width: 9; fill: none; pointer-events: stroke; cursor: pointer; }
@@ -628,6 +647,8 @@
       </div>
 
       <button class="tbtn" id="btnToday">Today</button>
+      <button class="tbtn" id="btnLabelName" title="Write each task name beside its bar">Task on chart</button>
+      <button class="tbtn" id="btnLabelOwner" title="Write who is responsible beside each bar">Responsible on chart</button>
       <button class="tbtn" id="btnExpand" title="Open every phase">Expand all</button>
       <button class="tbtn" id="btnCollapse" title="Fold every phase up">Collapse all</button>
 
