@@ -61,13 +61,15 @@ block module loading and sign in popups from `file://`.
 | Link two tasks | Hover a bar, drag the circle on either end onto another bar |
 | Change or remove a link | Click the arrow |
 | Overlap or space out two linked tasks | Click the arrow, set the offset |
-| Change phase colour | Click the small square next to a phase name |
+| Change phase color | Click the small square next to a phase name |
 | Undo | Ctrl or Cmd Z |
+| Show or hide a column | Right click the column headers, or Account, Columns to show |
+| Resize a column | Drag the divider in the header, like a spreadsheet |
 
-**Colours** live on the phase row. Click the small square to the left of a phase name
+**Colors** live on the phase row. Click the small square to the left of a phase name
 and pick one of the eight presets or open the custom picker underneath them. The chart
 updates as you slide the picker so you can see the result before committing. Everything
-nested under that phase takes the colour.
+nested under that phase takes the color.
 
 **Milestones** are tasks with zero days. Set the Days cell to 0 and the bar becomes a
 diamond. Set it back to a number and it becomes a normal task again.
@@ -115,12 +117,36 @@ Dependencies attach to individual tasks, not to phase rows. If you try to link a
 the app tells you and asks you to link the tasks inside it. Links that would create a
 loop are refused when you draw them.
 
+## Columns
+
+The grid shows a row number, Task Name, WBS, Responsible, Days, Start, Finish and
+% Done. WBS is the outline number and is worked out automatically from where a row sits
+in the tree, so it renumbers itself when you move things around.
+
+Drag the dividers in the header to resize, the same as a spreadsheet. Right click the
+headers to switch columns off. Task Name and the row number stay put, because the tree
+and the drag handle live on them. Both the widths and the hidden columns are stored in
+your own browser, so hiding a column does not change what anyone else sees.
+
 ## Exports
 
-Export gives a PNG or SVG of the whole chart, laid out for printing rather than for the
-screen, with every row shown including collapsed ones. The SVG is vector, so it scales
-cleanly into a report or a poster. CSV gives the table with outline numbers, dates and
-dependencies.
+Export gives a PNG or SVG of the chart with the table down the left, laid out for
+printing rather than for the screen. The SVG is vector, so it scales cleanly into a
+report or onto a poster. CSV gives the same table for a spreadsheet.
+
+**By default the export is whatever is on screen.** The columns you have showing, the
+rows you have expanded, in the order you have them. Collapse a phase you do not want in
+a status report and it is not in the file either.
+
+Three switches on the Export menu override that:
+
+- **Include hidden columns** puts every column in the file without unhiding it on screen
+- **Include collapsed rows** exports the whole plan even where you have phases folded up
+- **Only the dates on screen** narrows the chart to the window you are looking at, which
+  is useful for pulling out a single month. Bars running past the edge are cut off
+  cleanly rather than squashed
+
+Those switches are remembered per browser.
 
 ## Adding or removing people
 
@@ -169,5 +195,9 @@ is what makes weekend and holiday handling fall out for free.
 `app.js` re-renders the grid and timeline whenever data changes. During a drag it moves
 only the element being dragged and commits once on release, so nothing flickers.
 
-Colours live on the top level phase row and every descendant inherits, which is why the
+Colors live on the top level phase row and every descendant inherits, which is why the
 swatch only appears on phases.
+
+The export shares its arrow routing and color logic with the on screen chart, so the two
+cannot drift apart. It builds its own table rather than screenshotting the DOM, which is
+why it can include columns you have hidden.

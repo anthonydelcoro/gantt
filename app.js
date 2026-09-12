@@ -20,14 +20,17 @@ const ZOOM = {
 };
 
 const COLS = [
-  { key: 'num', label: '', w: 36, min: 30, fixed: true },
-  { key: 'name', label: 'Task Name', w: 268, min: 130 },
+  { key: 'num', label: '', w: 36, min: 30, required: true },
+  { key: 'name', label: 'Task Name', w: 248, min: 130, required: true },
+  { key: 'wbs', label: 'WBS', w: 64, min: 40 },
   { key: 'owner', label: 'Responsible', w: 112, min: 60 },
   { key: 'duration', label: 'Days', w: 54, min: 44, align: 'center' },
   { key: 'start', label: 'Start', w: 84, min: 64, align: 'center' },
   { key: 'finish', label: 'Finish', w: 84, min: 64, align: 'center' },
   { key: 'pct', label: '% Done', w: 84, min: 58, align: 'center' }
 ];
+
+const visibleCols = () => COLS.filter(c => !c.hidden);
 
 const ROW_H = 30;
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
@@ -37,7 +40,7 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 
 /* Which build is running. Shown in the Account menu so there is never any
    doubt about whether a deploy actually landed. */
-const BUILD = '2026-09-10e';
+const BUILD = '2026-09-11a';
 
 /* ==========================================================================
    State
@@ -57,7 +60,8 @@ const S = {
   px: 9.5,
   ready: false,
   undo: [],
-  suppressUndo: false
+  suppressUndo: false,
+  exportOpts: { allColumns: false, allRows: false, visibleRangeOnly: false }
 };
 
 const el = id => document.getElementById(id);
@@ -67,15 +71,18 @@ function loadPrefs() {
   try {
     const p = JSON.parse(localStorage.getItem('gantt.prefs') || '{}');
     if (p.widths) COLS.forEach(c => { if (p.widths[c.key]) c.w = p.widths[c.key]; });
+    if (p.hidden) COLS.forEach(c => { c.hidden = !c.required && !!p.hidden[c.key]; });
     if (p.zoom && ZOOM[p.zoom]) S.zoom = p.zoom;
+    if (p.exportOpts) Object.assign(S.exportOpts, p.exportOpts);
   } catch (e) { /* first run */ }
 }
 
 function savePrefs() {
   try {
-    const widths = {};
-    COLS.forEach(c => widths[c.key] = c.w);
-    localStorage.setItem('gantt.prefs', JSON.stringify({ widths, zoom: S.zoom }));
+    const widths = {}, hidden = {};
+    COLS.forEach(c => { widths[c.key] = c.w; if (c.hidden) hidden[c.key] = true; });
+    localStorage.setItem('gantt.prefs',
+      JSON.stringify({ widths, hidden, zoom: S.zoom, exportOpts: S.exportOpts }));
   } catch (e) { /* private browsing */ }
 }
 
@@ -211,7 +218,7 @@ function linksTouching(ids) {
   return S.links.filter(l => set.has(l.source) || set.has(l.target)).map(l => l.id);
 }
 
-function gridWidth() { return COLS.reduce((a, c) => a + c.w, 0); }
+function gridWidth() { return visibleCols().reduce((a, c) => a + c.w, 0); }
 
 function toast(msg, ms = 2400) {
   const t = el('toast');
@@ -272,7 +279,8 @@ function render() {
 function renderHead() {
   const head = el('gridHead');
   head.innerHTML = '';
-  COLS.forEach((c, i) => {
+  head.oncontextmenu = e => { e.preventDefault(); openColumnMenu(e); };
+  visibleCols().forEach(c => {
     const d = document.createElement('div');
     d.className = 'hcell' + (c.key === 'num' ? ' num' : '') +
       (c.align === 'center' ? ' center' : '');
@@ -288,12 +296,10 @@ function renderHead() {
       d.appendChild(add);
     }
 
-    if (!c.fixed || c.key === 'num') {
-      const grip = document.createElement('div');
-      grip.className = 'hgrip';
-      grip.addEventListener('mousedown', e => startColumnResize(e, i));
-      d.appendChild(grip);
-    }
+    const grip = document.createElement('div');
+    grip.className = 'hgrip';
+    grip.addEventListener('mousedown', e => startColumnResize(e, c));
+    d.appendChild(grip);
     head.appendChild(d);
   });
 }
@@ -312,7 +318,7 @@ function renderRows() {
     div.dataset.id = t.id;
     div.dataset.index = i;
 
-    for (const c of COLS) {
+    for (const c of visibleCols()) {
       const cell = document.createElement('div');
       cell.className = 'cell' + (c.align === 'center' ? ' center' : '');
       cell.style.width = c.w + 'px';
@@ -352,8 +358,7 @@ function renderRows() {
 
           const label = document.createElement('span');
           label.className = 'nametext' + (t.isMilestone ? ' milestone' : '');
-          const code = codes.get(t.id) || '';
-          label.innerHTML = `<span class="hint">${code}</span> ` + escapeHTML(t.text || '');
+          label.textContent = t.text || '';
           label.addEventListener('click', e => { e.stopPropagation(); editText(t.id, label); });
           cell.appendChild(label);
 
@@ -369,6 +374,10 @@ function renderRows() {
           cell.appendChild(btns);
           break;
         }
+
+        case 'wbs':
+          cell.innerHTML = `<span class="cell-wbs">${escapeHTML(codes.get(t.id) || '')}</span>`;
+          break;
 
         case 'owner':
           cell.classList.add('editable');
@@ -1302,10 +1311,9 @@ function applyRowMove(id, drop) {
    Column resizing and the split
    ========================================================================== */
 
-function startColumnResize(e, index) {
+function startColumnResize(e, col) {
   e.preventDefault();
   e.stopPropagation();
-  const col = COLS[index];
   const startX = e.clientX;
   const startW = col.w;
   dragSession(ev => {
@@ -1376,6 +1384,51 @@ function popMenu(anchorRect, build) {
     document.addEventListener('mousedown', close);
   }, 0);
   return m;
+}
+
+/* Right click the column headers, or use the Account menu. Task Name and the
+   row number stay put because the drag handle and the tree live on them. */
+function openColumnMenu(e) {
+  const rect = e.clientX !== undefined && e.clientX > 0
+    ? { left: e.clientX, bottom: e.clientY }
+    : e.target.getBoundingClientRect();
+
+  popMenu(rect, m => {
+    const head = document.createElement('div');
+    head.style.cssText = 'padding:8px 10px 6px;font-size:12px;color:#6b7684;';
+    head.textContent = 'Columns to show';
+    m.appendChild(head);
+
+    for (const c of COLS) {
+      if (c.required) continue;
+      const row = document.createElement('label');
+      row.style.cssText = 'display:flex;align-items:center;gap:9px;padding:5px 10px;' +
+        'cursor:pointer;font-size:13px;border-radius:6px;';
+      row.addEventListener('mouseenter', () => row.style.background = '#f3f6fa');
+      row.addEventListener('mouseleave', () => row.style.background = 'none');
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !c.hidden;
+      cb.dataset.col = c.key;
+      cb.style.cssText = 'width:15px;height:15px;';
+      cb.addEventListener('change', () => {
+        c.hidden = !cb.checked;
+        savePrefs();
+        render();
+      });
+
+      const name = document.createElement('span');
+      name.textContent = c.label;
+      row.append(cb, name);
+      m.appendChild(row);
+    }
+
+    const note = document.createElement('div');
+    note.style.cssText = 'padding:2px 10px 8px;font-size:11.5px;color:#97a1ad;max-width:220px;line-height:1.5;';
+    note.textContent = 'This is per browser, so it does not change what anyone else sees.';
+    m.appendChild(note);
+  });
 }
 
 function openPalette(e, id) {
@@ -1494,6 +1547,11 @@ function openAccountMenu(rect) {
     m.appendChild(who);
     m.appendChild(document.createElement('hr'));
 
+    const cols = document.createElement('button');
+    cols.textContent = 'Columns to show';
+    cols.addEventListener('click', () => { close(); openColumnMenu({ target: el('btnAccount') }); });
+    m.appendChild(cols);
+
     const week = document.createElement('button');
     week.textContent = 'Working days of the week';
     week.addEventListener('click', () => { close(); openWorkdays(rect); });
@@ -1608,6 +1666,35 @@ function editHolidays() {
 
 function openExportMenu(rect) {
   popMenu(rect, (m, close) => {
+    const head = document.createElement('div');
+    head.style.cssText = 'padding:8px 10px 4px;font-size:12px;color:#6b7684;max-width:250px;line-height:1.5;';
+    head.textContent = 'By default you get exactly what is on screen: the columns you have showing and the rows you have expanded.';
+    m.appendChild(head);
+
+    const toggle = (key, label) => {
+      const row = document.createElement('label');
+      row.style.cssText = 'display:flex;align-items:center;gap:9px;padding:5px 10px;' +
+        'cursor:pointer;font-size:13px;border-radius:6px;';
+      row.addEventListener('mouseenter', () => row.style.background = '#f3f6fa');
+      row.addEventListener('mouseleave', () => row.style.background = 'none');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !!S.exportOpts[key];
+      cb.dataset.opt = key;
+      cb.style.cssText = 'width:15px;height:15px;';
+      cb.addEventListener('change', () => { S.exportOpts[key] = cb.checked; savePrefs(); });
+      const span = document.createElement('span');
+      span.textContent = label;
+      row.append(cb, span);
+      m.appendChild(row);
+    };
+
+    toggle('allColumns', 'Include hidden columns');
+    toggle('allRows', 'Include collapsed rows');
+    toggle('visibleRangeOnly', 'Only the dates on screen');
+
+    m.appendChild(document.createElement('hr'));
+
     const item = (label, fn) => {
       const b = document.createElement('button');
       b.textContent = label;
@@ -1616,7 +1703,6 @@ function openExportMenu(rect) {
     };
     item('Chart as PNG', exportPNG);
     item('Chart as SVG', exportSVG);
-    m.appendChild(document.createElement('hr'));
     item('Table as CSV', exportCSV);
   });
 }
@@ -1640,42 +1726,110 @@ function esc(v) {
   return String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
-/* A standalone chart, laid out for printing rather than for the screen.
-   No labels on the bars, matching what you see in the app. */
+/* The exported chart mirrors what is on screen: the same columns, the same
+   rows you have expanded, in the same order. The switches on the Export menu
+   override that when you want the whole plan instead. */
+
+function exportColumns() {
+  return S.exportOpts.allColumns ? COLS.slice() : visibleCols();
+}
+
+function exportRows() {
+  const all = flatten(S.computed.tasks);
+  const kept = S.exportOpts.allRows ? all : all.filter(r => r.visible);
+  return kept.map((r, i) => ({ ...r, index: i }));
+}
+
+/* The slice of time the chart covers. */
+function exportRange() {
+  const c = S.computed;
+  if (S.exportOpts.visibleRangeOnly && S.range) {
+    const tl = el('tlBody');
+    const from = addDays(parseISO(S.range.from), Math.floor(tl.scrollLeft / S.px));
+    const to = addDays(parseISO(S.range.from),
+      Math.ceil((tl.scrollLeft + Math.max(200, tl.clientWidth)) / S.px));
+    return { from: iso(from), to: iso(to) };
+  }
+  let from = c.start, to = c.end;
+  for (const t of c.tasks) {
+    if (t.start < from) from = t.start;
+    if (t.finish > to) to = t.finish;
+  }
+  return { from: iso(addDays(parseISO(from), -3)), to: iso(addDays(parseISO(to), 8)) };
+}
+
+/* Rough truncation. Helvetica at these sizes averages a little over half the
+   font size per character, which is close enough for a label column. */
+function fitText(text, widthPx, fontPx) {
+  const str = String(text == null ? '' : text);
+  const room = Math.floor((widthPx - 8) / (fontPx * 0.52));
+  if (room <= 1) return '';
+  return str.length > room ? str.slice(0, Math.max(1, room - 1)) + '\u2026' : str;
+}
+
+function cellValue(key, row, codes) {
+  const t = row.task;
+  switch (key) {
+    case 'num': return row.index + 1;
+    case 'name': return t.text || '';
+    case 'wbs': return codes.get(t.id) || '';
+    case 'owner': return t.owner || '';
+    case 'duration': return t.isMilestone ? '' : t.duration;
+    case 'start': return fmtDate(t.start);
+    case 'finish': return fmtDate(t.finish);
+    case 'pct': return t.pct + '%';
+    default: return '';
+  }
+}
+
 function buildSVG() {
   const c = S.computed;
   const codes = outlineCodes();
-  const rows = flatten(c.tasks);              // every row, including collapsed ones
-  const LEFT = 320, ROW = 22, HEAD = 46, PAD = 22, TITLE = 50;
+  const cols = exportColumns();
+  const rows = exportRows();
+  const range = exportRange();
 
-  let from = c.start, to = c.end;
-  for (const t of c.tasks) { if (t.start < from) from = t.start; if (t.finish > to) to = t.finish; }
-  const startD = addDays(parseISO(from), -3);
-  const endD = addDays(parseISO(to), 8);
+  const ROW = 22, HEAD = 44, PAD = 22, TITLE = 50, FONT = 10.5;
+  const LEFT = cols.reduce((a, col) => a + col.w, 0);
+
+  const startD = parseISO(range.from);
+  const endD = parseISO(range.to);
   const totalDays = Math.max(1, Math.round((endD - startD) / 86400000));
-  const px = Math.max(2, Math.min(20, 1120 / totalDays));
+  const px = Math.max(1.6, Math.min(22, 1120 / totalDays));
   const chartW = totalDays * px;
   const W = LEFT + chartW + PAD * 2;
-  const H = TITLE + HEAD + rows.length * ROW + PAD * 2 + 20;
+  const H = TITLE + HEAD + rows.length * ROW + PAD * 2 + 18;
 
-  const x = d => PAD + LEFT + Math.round(((parseISO(d) - startD) / 86400000) * px);
+  const x = d => PAD + LEFT + ((parseISO(d) - startD) / 86400000) * px;
+  const n = v => Number(v).toFixed(1);
   const top = PAD + TITLE + HEAD;
   const bottom = top + rows.length * ROW;
+  const chartL = PAD + LEFT;
 
   const s = [];
   s.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(W)}" height="${Math.round(H)}" viewBox="0 0 ${Math.round(W)} ${Math.round(H)}" font-family="Helvetica, Arial, sans-serif">`);
-  s.push('<defs><marker id="ah" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="#8b95a3"/></marker></defs>');
+  s.push('<defs>' +
+    '<marker id="ah" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">' +
+    '<path d="M0,0 L7,3.5 L0,7 z" fill="#8b95a3"/></marker>' +
+    `<clipPath id="chart"><rect x="${chartL}" y="${top - HEAD}" width="${n(chartW)}" height="${bottom - top + HEAD}"/></clipPath>` +
+    '</defs>');
   s.push('<rect width="100%" height="100%" fill="#ffffff"/>');
+
+  const bits = [`${fmtDate(c.start)} to ${fmtDate(c.end)}`, `${c.workdays} working days`,
+    `${rows.length} row${rows.length === 1 ? '' : 's'}`, `exported ${fmtDate(todayISO())}`];
   s.push(`<text x="${PAD}" y="${PAD + 19}" font-size="16" font-weight="700" fill="#16202c">${esc(S.meta.name || 'Project Schedule')}</text>`);
-  s.push(`<text x="${PAD}" y="${PAD + 36}" font-size="10.5" fill="#6b7684">${esc(`${fmtDate(c.start)} to ${fmtDate(c.end)}  ·  ${c.workdays} working days  ·  ${rows.length} rows  ·  exported ${fmtDate(todayISO())}`)}</text>`);
+  s.push(`<text x="${PAD}" y="${PAD + 36}" font-size="10.5" fill="#6b7684">${esc(bits.join('  \u00b7  '))}</text>`);
 
   rows.forEach((r, i) => {
-    if (i % 2) s.push(`<rect x="${PAD}" y="${top + i * ROW}" width="${LEFT + chartW}" height="${ROW}" fill="#fafbfc"/>`);
+    if (i % 2) s.push(`<rect x="${PAD}" y="${top + i * ROW}" width="${n(LEFT + chartW)}" height="${ROW}" fill="#fafbfc"/>`);
   });
 
+  /* ---- chart, clipped so a narrowed date range cuts cleanly ---- */
+  s.push('<g clip-path="url(#chart)">');
+
   for (let d = new Date(startD.getTime()); d < endD; d = addDays(d, 1)) {
-    if (px >= 5 && !c.calendar.isWorking(iso(d))) {
-      s.push(`<rect x="${x(iso(d))}" y="${top}" width="${Math.ceil(px)}" height="${bottom - top}" fill="#f2f4f7"/>`);
+    if (px >= 4 && !c.calendar.isWorking(iso(d))) {
+      s.push(`<rect x="${n(x(iso(d)))}" y="${top}" width="${Math.ceil(px)}" height="${bottom - top}" fill="#f2f4f7"/>`);
     }
   }
 
@@ -1684,47 +1838,40 @@ function buildSVG() {
     const nxt = new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + 1, 1));
     const a = x(iso(m < startD ? startD : m));
     const b = x(iso(nxt > endD ? endD : nxt));
-    s.push(`<line x1="${a}" y1="${top - 24}" x2="${a}" y2="${bottom}" stroke="#e3e7ec"/>`);
+    s.push(`<line x1="${n(a)}" y1="${top - 24}" x2="${n(a)}" y2="${bottom}" stroke="#e3e7ec"/>`);
     if (b - a > 32) {
-      s.push(`<text x="${a + 5}" y="${top - 10}" font-size="10.5" font-weight="600" fill="#4b5663">${esc(b - a > 74 ? MONTHS[m.getUTCMonth()] + ' ' + m.getUTCFullYear() : MONTHS[m.getUTCMonth()].slice(0, 3))}</text>`);
+      const label = b - a > 74 ? `${MONTHS[m.getUTCMonth()]} ${m.getUTCFullYear()}`
+        : MONTHS[m.getUTCMonth()].slice(0, 3);
+      s.push(`<text x="${n(a + 5)}" y="${top - 10}" font-size="10.5" font-weight="600" fill="#4b5663">${esc(label)}</text>`);
     }
     m = nxt;
   }
-  s.push(`<line x1="${PAD + LEFT}" y1="${top - 1}" x2="${PAD + LEFT + chartW}" y2="${top - 1}" stroke="#c8ced7"/>`);
 
   const t0 = todayISO();
   if (parseISO(t0) >= startD && parseISO(t0) <= endD) {
-    s.push(`<line x1="${x(t0)}" y1="${top - 6}" x2="${x(t0)}" y2="${bottom}" stroke="#e0574f" stroke-width="1.2" stroke-dasharray="3 3"/>`);
+    s.push(`<line x1="${n(x(t0))}" y1="${top - 6}" x2="${n(x(t0))}" y2="${bottom}" stroke="#e0574f" stroke-width="1.2" stroke-dasharray="3 3"/>`);
   }
 
   const pos = new Map();
   rows.forEach((r, i) => {
     const t = r.task;
-    const y = top + i * ROW, cy = y + ROW / 2;
-    const indent = r.depth * 12;
-    const code = codes.get(t.id) || '';
-    let label = t.text || '';
-    const room = Math.floor((LEFT - 30 - indent - code.length * 5.5) / 5.4);
-    if (label.length > room) label = label.slice(0, Math.max(3, room - 1)) + '…';
-    s.push(`<text x="${PAD + 4 + indent}" y="${cy + 3.5}" font-size="10.5" fill="#16202c"${t.isSummary ? ' font-weight="700"' : ''}><tspan fill="#97a1ad">${esc(code)}</tspan> ${esc(label)}</text>`);
-
+    const cy = top + i * ROW + ROW / 2;
     const x1 = x(t.start);
     const x2 = t.isMilestone ? x1 : x(iso(addDays(parseISO(t.finish), 1)));
     const w = Math.max(3, x2 - x1);
 
     if (t.isMilestone) {
-      s.push(`<path d="M${x1},${cy - 6} L${x1 + 6},${cy} L${x1},${cy + 6} L${x1 - 6},${cy} Z" fill="#16202c"/>`);
+      s.push(`<path d="M${n(x1)},${cy - 6} L${n(x1 + 6)},${cy} L${n(x1)},${cy + 6} L${n(x1 - 6)},${cy} Z" fill="#16202c"/>`);
       pos.set(t.id, { x1: x1 - 6, x2: x1 + 6, cy });
     } else if (t.isSummary) {
-      s.push(`<rect x="${x1}" y="${cy - 4}" width="${w}" height="8" fill="#1f3a5f"/>`);
-      if (t.pct > 0) s.push(`<rect x="${x1}" y="${cy - 1.5}" width="${w * t.pct / 100}" height="3" fill="rgba(255,255,255,0.55)"/>`);
-      s.push(`<path d="M${x1},${cy + 4} l0,5 l5,-5 z" fill="#1f3a5f"/>`);
-      s.push(`<path d="M${x1 + w},${cy + 4} l0,5 l-5,-5 z" fill="#1f3a5f"/>`);
+      s.push(`<rect x="${n(x1)}" y="${cy - 4}" width="${n(w)}" height="8" fill="#1f3a5f"/>`);
+      if (t.pct > 0) s.push(`<rect x="${n(x1)}" y="${cy - 1.5}" width="${n(w * t.pct / 100)}" height="3" fill="rgba(255,255,255,0.55)"/>`);
+      s.push(`<path d="M${n(x1)},${cy + 4} l0,5 l5,-5 z" fill="#1f3a5f"/>`);
+      s.push(`<path d="M${n(x1 + w)},${cy + 4} l0,5 l-5,-5 z" fill="#1f3a5f"/>`);
       pos.set(t.id, { x1, x2: x1 + w, cy });
     } else {
-      const colour = t.colour || PALETTE[0];
-      s.push(`<rect x="${x1}" y="${cy - 7}" width="${w}" height="14" rx="2.5" fill="${colour}"/>`);
-      if (t.pct > 0) s.push(`<rect x="${x1}" y="${cy - 2.5}" width="${w * t.pct / 100}" height="5" fill="rgba(0,0,0,0.5)"/>`);
+      s.push(`<rect x="${n(x1)}" y="${cy - 7}" width="${n(w)}" height="14" rx="2.5" fill="${t.colour || PALETTE[0]}"/>`);
+      if (t.pct > 0) s.push(`<rect x="${n(x1)}" y="${cy - 2.5}" width="${n(w * t.pct / 100)}" height="5" fill="rgba(0,0,0,0.5)"/>`);
       pos.set(t.id, { x1, x2: x1 + w, cy });
     }
   });
@@ -1737,14 +1884,45 @@ function buildSVG() {
     const enterRight = (type === '2' || type === '3');
     const sx = fromRight ? a.x2 : a.x1;
     const tx = enterRight ? b.x2 : b.x1;
-    const d = linkPath(sx, a.cy, tx, b.cy, fromRight, enterRight, ROW);
-    s.push(`<path d="${d}" fill="none" stroke="#8b95a3" stroke-width="1.1" marker-end="url(#ah)"/>`);
+    s.push(`<path d="${linkPath(sx, a.cy, tx, b.cy, fromRight, enterRight, ROW)}" fill="none" stroke="#8b95a3" stroke-width="1.1" marker-end="url(#ah)"/>`);
   }
 
+  s.push('</g>');
+
+  /* ---- the table down the left ---- */
+  let cx = PAD;
+  for (const col of cols) {
+    if (col.label) {
+      s.push(`<text x="${n(cx + (col.align === 'center' ? col.w / 2 : 5))}" y="${top - 10}" font-size="10" font-weight="600" fill="#6b7684"` +
+        (col.align === 'center' ? ' text-anchor="middle"' : '') + `>${esc(col.label)}</text>`);
+    }
+    if (cx > PAD) s.push(`<line x1="${cx}" y1="${top - 22}" x2="${cx}" y2="${bottom}" stroke="#eef1f4"/>`);
+    cx += col.w;
+  }
+
+  rows.forEach((r, i) => {
+    const t = r.task;
+    const cy = top + i * ROW + ROW / 2 + 3.5;
+    let cxx = PAD;
+    for (const col of cols) {
+      const indent = col.key === 'name' ? r.depth * 12 : 0;
+      const text = fitText(cellValue(col.key, r, codes), col.w - indent, FONT);
+      if (text !== '') {
+        const centred = col.align === 'center';
+        s.push(`<text x="${n(centred ? cxx + col.w / 2 : cxx + 5 + indent)}" y="${cy}" font-size="${FONT}" ` +
+          `fill="${(col.key === 'num' || col.key === 'wbs') ? '#97a1ad' : '#16202c'}"` +
+          (centred ? ' text-anchor="middle"' : '') +
+          (t.isSummary ? ' font-weight="700"' : '') + `>${esc(text)}</text>`);
+      }
+      cxx += col.w;
+    }
+  });
+
+  s.push(`<line x1="${chartL}" y1="${top - 1}" x2="${n(chartL + chartW)}" y2="${top - 1}" stroke="#c8ced7"/>`);
+  s.push(`<line x1="${chartL}" y1="${top - 22}" x2="${chartL}" y2="${bottom}" stroke="#c8ced7"/>`);
   s.push('</svg>');
   return s.join('');
 }
-
 function exportSVG() {
   download(new Blob([buildSVG()], { type: 'image/svg+xml;charset=utf-8' }), slug() + '.svg');
 }
@@ -1774,20 +1952,23 @@ function exportPNG() {
 function exportCSV() {
   const c = S.computed;
   const codes = outlineCodes();
+  const cols = exportColumns().filter(col => col.key !== 'num');
   const incoming = new Map();
   for (const l of c.links) {
     if (!incoming.has(l.target)) incoming.set(l.target, []);
     incoming.get(l.target).push(l);
   }
   const nameOf = id => byId(id)?.text || '';
-  const head = ['Outline', 'Task Name', 'Responsible', 'Days', 'Start', 'Finish', '% Done', 'Depends on'];
-  const rows = flatten(c.tasks).map(r => {
+
+  const head = [...cols.map(col => col.label || '#'), 'Depends on'];
+  const rows = exportRows().map(r => {
     const t = r.task;
-    return [
-      codes.get(t.id) || '', t.text || '', t.owner || '',
-      t.isMilestone ? 0 : t.duration, t.start, t.finish, t.pct,
-      (incoming.get(t.id) || []).map(l => nameOf(l.source)).join('; ')
-    ];
+    /* full dates in a spreadsheet, not the short form the chart uses */
+    const value = col => col.key === 'start' ? t.start
+      : col.key === 'finish' ? t.finish
+        : col.key === 'pct' ? t.pct
+          : cellValue(col.key, r, codes);
+    return [...cols.map(value), (incoming.get(t.id) || []).map(l => nameOf(l.source)).join('; ')];
   });
   const csv = [head, ...rows].map(r => r.map(v => {
     v = v == null ? '' : String(v);
