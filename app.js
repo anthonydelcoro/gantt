@@ -40,7 +40,7 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 
 /* Which build is running. Shown in the Account menu so there is never any
    doubt about whether a deploy actually landed. */
-const BUILD = '2026-09-11b';
+const BUILD = '2026-09-11c';
 
 /* ==========================================================================
    State
@@ -1846,6 +1846,14 @@ function exportRange() {
 
 /* Rough truncation. Helvetica at these sizes averages a little over half the
    font size per character, which is close enough for a label column. */
+function weekStart(d) {
+  const r = new Date(d.getTime());
+  r.setUTCDate(r.getUTCDate() - ((r.getUTCDay() + 6) % 7));
+  return r;
+}
+function monthStart(d) { return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)); }
+function monthStep(d) { return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)); }
+
 function fitText(text, widthPx, fontPx) {
   const str = String(text == null ? '' : text);
   const room = Math.floor((widthPx - 8) / (fontPx * 0.52));
@@ -1881,7 +1889,10 @@ function buildSVG() {
   const startD = parseISO(range.from);
   const endD = parseISO(range.to);
   const totalDays = Math.max(1, Math.round((endD - startD) / 86400000));
-  const px = Math.max(1.6, Math.min(22, 1120 / totalDays));
+  /* the exported chart uses the same day, week or month scale you are looking
+     at, so switching to Month gives you a compact chart and Day a detailed one */
+  const MAX_W = 12000;
+  const px = Math.min(ZOOM[S.zoom].px, MAX_W / totalDays);
   const chartW = totalDays * px;
   const W = LEFT + chartW + PAD * 2;
   const H = TITLE + HEAD + rows.length * ROW + PAD * 2 + 18;
@@ -1913,25 +1924,64 @@ function buildSVG() {
   /* ---- chart, clipped so a narrowed date range cuts cleanly ---- */
   s.push('<g clip-path="url(#chart)">');
 
-  for (let d = new Date(startD.getTime()); d < endD; d = addDays(d, 1)) {
-    if (px >= 4 && !c.calendar.isWorking(iso(d))) {
-      s.push(`<rect x="${n(x(iso(d)))}" y="${top}" width="${Math.ceil(px)}" height="${bottom - top}" fill="#f2f4f7"/>`);
+  if (ZOOM[S.zoom].weekend && px >= 4) {
+    for (let d = new Date(startD.getTime()); d < endD; d = addDays(d, 1)) {
+      if (!c.calendar.isWorking(iso(d))) {
+        s.push(`<rect x="${n(x(iso(d)))}" y="${top}" width="${Math.ceil(px)}" height="${bottom - top}" fill="#f2f4f7"/>`);
+      }
     }
   }
 
-  let m = new Date(Date.UTC(startD.getUTCFullYear(), startD.getUTCMonth(), 1));
-  while (m < endD) {
-    const nxt = new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + 1, 1));
-    const a = x(iso(m < startD ? startD : m));
-    const b = x(iso(nxt > endD ? endD : nxt));
-    s.push(`<line x1="${n(a)}" y1="${top - 24}" x2="${n(a)}" y2="${bottom}" stroke="#e3e7ec"/>`);
-    if (b - a > 32) {
-      const label = b - a > 74 ? `${MONTHS[m.getUTCMonth()]} ${m.getUTCFullYear()}`
-        : MONTHS[m.getUTCMonth()].slice(0, 3);
-      s.push(`<text x="${n(a + 5)}" y="${top - 10}" font-size="10.5" font-weight="600" fill="#4b5663">${esc(label)}</text>`);
+  /* two bands of scale, the same shape as the header on screen */
+  const headTop = top - HEAD;
+  const band = headTop + 22;
+  const clampD = d => d < startD ? startD : (d > endD ? endD : d);
+
+  const upper = (from, to, label, rule) => {
+    const a = x(iso(clampD(from))), b = x(iso(clampD(to)));
+    if (rule) s.push(`<line x1="${n(a)}" y1="${headTop}" x2="${n(a)}" y2="${bottom}" stroke="#e3e7ec"/>`);
+    if (b - a > 34 && label) {
+      s.push(`<text x="${n(a + 5)}" y="${band - 7}" font-size="10.5" font-weight="600" fill="#4b5663">${esc(label)}</text>`);
     }
-    m = nxt;
+  };
+
+  const lower = (from, to, label, off) => {
+    const a = x(iso(clampD(from))), b = x(iso(clampD(to)));
+    if (off) s.push(`<rect x="${n(a)}" y="${band}" width="${n(b - a)}" height="${top - band}" fill="#eceff3"/>`);
+    s.push(`<line x1="${n(a)}" y1="${band}" x2="${n(a)}" y2="${bottom}" stroke="#eef1f4"/>`);
+    if (b - a > 9 && label) {
+      s.push(`<text x="${n((a + b) / 2)}" y="${top - 7}" font-size="9.5" fill="#8a93a0" text-anchor="middle">${esc(label)}</text>`);
+    }
+  };
+
+  if (S.zoom === 'day') {
+    for (let d = weekStart(startD); d < endD; d = addDays(d, 7)) {
+      upper(d, addDays(d, 7),
+        `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()].slice(0, 3)} '${String(d.getUTCFullYear()).slice(2)}`, true);
+    }
+    for (let d = new Date(startD.getTime()); d < endD; d = addDays(d, 1)) {
+      lower(d, addDays(d, 1), DOW[d.getUTCDay()], !c.calendar.isWorking(iso(d)));
+    }
+  } else if (S.zoom === 'week') {
+    for (let m2 = monthStart(startD); m2 < endD; m2 = monthStep(m2)) {
+      upper(m2, monthStep(m2), `${MONTHS[m2.getUTCMonth()]} ${m2.getUTCFullYear()}`, true);
+    }
+    for (let d = weekStart(startD); d < endD; d = addDays(d, 7)) {
+      lower(d, addDays(d, 7), String(d.getUTCDate()), false);
+    }
+  } else {
+    for (let y = startD.getUTCFullYear(); ; y++) {
+      const a = new Date(Date.UTC(y, 0, 1)), b = new Date(Date.UTC(y + 1, 0, 1));
+      if (a >= endD) break;
+      upper(a, b, String(y), true);
+      if (b >= endD) break;
+    }
+    for (let m2 = monthStart(startD); m2 < endD; m2 = monthStep(m2)) {
+      lower(m2, monthStep(m2), MONTHS[m2.getUTCMonth()].slice(0, 3), false);
+    }
   }
+
+  s.push(`<line x1="${chartL}" y1="${band}" x2="${n(chartL + chartW)}" y2="${band}" stroke="#e3e7ec"/>`);
 
   const t0 = todayISO();
   if (parseISO(t0) >= startD && parseISO(t0) <= endD) {
@@ -2036,7 +2086,9 @@ function exportPNG() {
   const url = URL.createObjectURL(blob);
   const img = new Image();
   img.onload = () => {
-    const scale = 2;
+    /* browsers refuse canvases past roughly 16000px, and a long plan at day
+       scale gets there easily, so back the resolution off rather than fail */
+    const scale = Math.max(1, Math.min(2, 15000 / Math.max(img.width, img.height)));
     const canvas = document.createElement('canvas');
     canvas.width = img.width * scale;
     canvas.height = img.height * scale;

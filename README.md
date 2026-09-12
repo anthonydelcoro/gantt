@@ -154,9 +154,16 @@ Export gives a PNG or SVG of the chart with the table down the left, laid out fo
 printing rather than for the screen. The SVG is vector, so it scales cleanly into a
 report or onto a poster. CSV gives the same table for a spreadsheet.
 
-**By default the export is whatever is on screen.** The columns you have showing, the
-rows you have expanded, in the order you have them. Collapse a phase you do not want in
-a status report and it is not in the file either.
+**By default the export is whatever is on screen.** The columns you have showing, in the
+order you have them, the rows you have expanded, and the timeline scale you have
+selected. Collapse a phase you do not want in a status report and it is not in the file
+either.
+
+The scale matters most for how the file comes out. Month gives you a compact chart that
+drops into a slide. Week is a good middle. Day gives you every weekday labelled with
+weekends shaded, which is detailed but wide, so it suits a printed wall chart more than
+a document. A very long plan at day scale is capped in width so it cannot produce a file
+that will not open, and the PNG resolution is reduced rather than failing outright.
 
 Three switches on the Export menu override that:
 
